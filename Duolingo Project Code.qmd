@@ -38,7 +38,29 @@ set.seed(1234)
 duosample <- sample_n(duodata, 2622956/54)
 ```
 
-```{r}
+```{r viz-missing}
+vis_miss(duosample, 
+         show_perc = TRUE) 
+miss_var_summary(duosample)
+
+duosample_mis <- duosample |> 
+  select(prompt, time, client, format, session)
+
+gg_miss_var(duosample_mis)
+gg_miss_var(duosample_mis, 
+            facet = client, 
+            show_pct = TRUE)
+gg_miss_var(duosample_mis, 
+            facet = format, 
+            show_pct = TRUE)
+gg_miss_var(duosample_mis, 
+            facet = session, 
+            show_pct = TRUE)
+gg_miss_upset(duosample_mis)
+
+```
+
+```{r viz-variable-dist}
 duosample |>
   pivot_longer(cols = c(part_of_speech, 
                         client, 
@@ -63,5 +85,12 @@ duosample |>
              scales = "free") + 
   coord_flip()
 
-vis_miss(duosample) 
+duosample |>
+  pivot_longer(cols = where(is.numeric), 
+               names_to = "variable",
+               values_to = "value") |>
+  ggplot() +
+  geom_histogram(aes(value)) +
+  facet_wrap(. ~ variable, 
+             scales = "free") 
 ```
