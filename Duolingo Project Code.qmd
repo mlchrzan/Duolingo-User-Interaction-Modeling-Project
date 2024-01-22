@@ -34,12 +34,16 @@ duoskim
 ## Sample Data
 
 ```{r sample}
+set.seed(1234)
 duosample <- sample_n(duodata, 2622956/54)
 ```
 
 ```{r}
 duosample |>
-  pivot_longer(cols = where(is.numeric),
+  pivot_longer(cols = c(part_of_speech, 
+                        client, 
+                        session, 
+                        format),
                names_to = "variable",
                values_to = "value") |>
   ggplot() +
@@ -48,5 +52,16 @@ duosample |>
              scales = "free") + 
   coord_flip()
 
-vis_miss(sample_n(duodata, 2622956/54)) 
+duosample |>
+  pivot_longer(cols = c(dependency_label, 
+                        countries),
+               names_to = "variable",
+               values_to = "value") |>
+  ggplot() +
+  geom_bar(aes(value)) +
+  facet_wrap(. ~ variable, 
+             scales = "free") + 
+  coord_flip()
+
+vis_miss(duosample) 
 ```
