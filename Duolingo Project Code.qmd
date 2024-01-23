@@ -25,7 +25,7 @@ duodata <- read_csv("data_flatformat.csv")
 
 # Examine Data
 
-```{r}
+```{r view-data}
 glimpse(duodata)
 duoskim <- skim(duodata)
 duoskim
