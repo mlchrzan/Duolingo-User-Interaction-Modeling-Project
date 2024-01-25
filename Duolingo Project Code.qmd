@@ -5,6 +5,18 @@ format: html
 editor: visual
 ---
 
+# Introduction
+
+Given a history of errors made by learners of a second language, the task is to predict errors that they are likely to make at arbitrary points in the future.
+
+# Research Question
+
+Michael's ideas:
+
+1.  Which factors best predict the user getting the task correct?
+
+2.  
+
 # Setup
 
 ## Libraries
@@ -15,6 +27,9 @@ Which libraries will we use and why?
 library(tidyverse)
 library(skimr)
 library(naniar)
+library(gt)
+library(MASS)
+library(glmnet)
 ```
 
 ## Import Data
@@ -29,16 +44,16 @@ duodata <- read_csv("data_flatformat.csv")
 glimpse(duodata)
 duoskim <- skim(duodata)
 duoskim
+
 ```
 
-## Sample Data
-
-```{r sample}
-set.seed(1234)
-duosample <- sample_n(duodata, 2622956/54)
-```
+## Missing Data
 
 ```{r viz-missing}
+#Setting sample since these packaged functions throw errors for large data
+set.seed(1234)
+duosample <- sample_n(duodata, 2622956/54)
+
 vis_miss(duosample, 
          show_perc = TRUE) 
 miss_var_summary(duosample)
@@ -60,8 +75,37 @@ gg_miss_upset(duosample_mis)
 
 ```
 
+```{r mis-prompt}
+#Examining Missiningness Related to Prompt and Time with Other Variables
+#Is all the missing prompt data in format? Appears so (NOTE, not the sample, full dataset)
+
+#Prompt
+duodata |> 
+  dplyr::select(prompt, format, session, client) |> 
+  group_by(format, session, client) |> 
+  miss_var_summary() |>
+  arrange(desc(pct_miss))
+
+#Time
+duodata |> 
+  dplyr::select(time, format, session, client) |> 
+  group_by(format, session, client) |> 
+  miss_var_summary() |>
+  arrange(desc(pct_miss))
+```
+
+```{r remove-mis}
+#Prompt missing data is entirely on the listen format
+#Time missing data seems to mostly be a problem on iOS but Michael can't see a pattern beyond that. 
+#Both seem fair to Michael to remove
+
+duodata <- duodata |> na.omit()
+```
+
+## Distributions
+
 ```{r viz-variable-dist}
-duosample |>
+duodata |>
   pivot_longer(cols = c(part_of_speech, 
                         client, 
                         session, 
@@ -74,7 +118,7 @@ duosample |>
              scales = "free") + 
   coord_flip()
 
-duosample |>
+duodata |>
   pivot_longer(cols = c(dependency_label, 
                         countries),
                names_to = "variable",
@@ -85,7 +129,7 @@ duosample |>
              scales = "free") + 
   coord_flip()
 
-duosample |>
+duodata |>
   pivot_longer(cols = where(is.numeric), 
                names_to = "variable",
                values_to = "value") |>
@@ -93,4 +137,107 @@ duosample |>
   geom_histogram(aes(value)) +
   facet_wrap(. ~ variable, 
              scales = "free") 
+
+#Should we include folks at 0 days?
+```
+
+```{r check-countries}
+distinct(duodata, countries)
+#How should we handle multiple countries? 
+```
+
+```{r}
+duodata |> 
+  filter(days >= 1)
+```
+
+# Split Data
+
+```{r split-data}
+set.seed(1234) 
+train <- sample_frac(duodata, 0.8)
+test <- filter(duodata, !duodata$instance_id %in% train$instance_id) 
+```
+
+```{r michaels-playground}
+
+#How do we predict for specific users? Do we need to pivot wide?? 
+
+m_logit <- glm(label ~ part_of_speech + 
+                 days + 
+                 client + 
+                 session + 
+                 format + 
+                 time,
+               data = train, 
+               family = binomial(link = "logit"))
+
+summary(m_logit)
+```
+
+```{r ridge}
+train_matrix_x <- model.matrix(label ~ part_of_speech + 
+                                 days + 
+                                 client + 
+                                 session + 
+                                 format + 
+                                 time,
+                               data = train)
+
+
+train_matrix_y <- train |> 
+  dplyr::select(label)  |> 
+  as.matrix()
+
+m_ridge <- cv.glmnet(x = train_matrix_x,
+                     y = train_matrix_y,
+                     alpha = 0)
+
+plot(m_ridge, "lambda")
+
+m_ridge_coefs <- coef(m_ridge, s = "lambda.1se") 
+summary_m_ridge <- summary(m_ridge_coefs)
+
+m_ridge_coefs <- tibble(variable = rownames(m_ridge_coefs)[summary_m_ridge$i],
+                        coefficient = summary_m_ridge$x) |> 
+  filter(variable != "(Intercept)")
+
+ggplot(m_ridge_coefs, 
+       aes(y = variable, 
+           x = coefficient)) +
+  geom_segment(aes(y = variable,
+                   yend = variable, 
+                   x = 0, 
+                   xend = coefficient)) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0, 
+             linetype = "dotted", 
+             color = "grey",
+             linewidth = 0.75) +
+  theme_bw()
+```
+
+```{r lasso}
+m_lasso <- cv.glmnet(x = train_matrix_x,
+                     y = train_matrix_y,
+                     alpha = 1)
+
+m_lasso_coefs <- coef(m_lasso, "lambda.1se") 
+summary_m_lasso <- summary(m_lasso_coefs)
+
+m_lasso_coefs <- tibble(variable = 
+                        rownames(m_lasso_coefs)[summary_m_lasso$i],
+                      coefficient = summary_m_lasso$x) |> 
+  filter(variable != "(Intercept)")
+
+ggplot(m_lasso_coefs, 
+       aes(y = variable, 
+           x = coefficient)) +
+  geom_segment(aes(y = variable,
+                   yend = variable, 
+                   x = 0, 
+                   xend = coefficient)) +
+  geom_point(size = 4, 
+             alpha = 0.6) +
+  theme_bw()
 ```
