@@ -11,12 +11,6 @@ Given a history of errors made by learners of a second language, the task is to 
 
 # Research Question
 
-Michael's ideas:
-
-1.  Which factors best predict the user getting the task correct?
-
-2.  
-
 # Setup
 
 ## Libraries
@@ -39,6 +33,10 @@ duodata <- read_csv("data_flatformat.csv")
 ```
 
 # Examine Data
+
+```{r}
+n_distinct(duodata$user)
+```
 
 ```{r view-data}
 glimpse(duodata)
@@ -159,10 +157,9 @@ train <- sample_frac(duodata, 0.8)
 test <- filter(duodata, !duodata$instance_id %in% train$instance_id) 
 ```
 
-```{r michaels-playground}
+```{r logit}
 
 #How do we predict for specific users? Do we need to pivot wide?? 
-
 m_logit <- glm(label ~ part_of_speech + 
                  days + 
                  client + 
@@ -239,5 +236,99 @@ ggplot(m_lasso_coefs,
                    xend = coefficient)) +
   geom_point(size = 4, 
              alpha = 0.6) +
-  theme_bw()
+  theme_bw() 
+```
+
+```{r viz for seminar}
+#Create a viz of x = time, y = accuracy measured by proportion of label that is 1
+#Could also show if accuracy changes based on session
+
+#SOMETHING VERY STRANGE HAPPENING HERE w/ iOS-------
+duosample |> 
+  group_by(user, session_id) |> 
+  mutate(session_accuracy = mean(label)) |> 
+  ungroup() |> 
+  ggplot(aes(x = days, 
+             y = session_accuracy, 
+             color = session)) + 
+  #geom_point() + 
+  geom_smooth(method = 'lm', 
+              se = F) + 
+  facet_grid(~client) +
+  labs(title = 'User Session Accuracy Over Time', 
+       subtitle = '',
+       x = 'Session Type', 
+       y = 'Session Accuracy') + 
+  theme_minimal() 
+#--------------------------------------------------
+
+duodata |> 
+  group_by(session) |> 
+  summarise(session_accuracy = mean(label)) |> 
+  ungroup() |> 
+  ggplot(aes(x = session, 
+             y = session_accuracy, 
+             fill = session)) + 
+  geom_col() +
+  scale_fill_manual(values = c('#7ac70c', '#7ac70c', '#7ac70c')) +
+  labs(title = 'Practice Makes Perfect?', 
+       subtitle = 'Average Session Accuracy based on Session Type',
+       x = 'Session Type', 
+       y = 'Session Accuracy') + 
+  theme_minimal() +
+  theme(legend.position = 'none') +
+  coord_flip()
+
+duodata |> 
+  group_by(session_id) |> 
+  mutate(session_accuracy = mean(label)) |> 
+  ungroup() |> 
+  ggplot(aes(x = days, 
+             y = session_accuracy, 
+             color = session)) + 
+  geom_smooth(method = 'lm') + 
+  labs(title = 'It All Adds Up', 
+       subtitle = 'Session Accuracy Over Time',
+       x = 'Days Since Starting Duolingo', 
+       y = 'Session Accuracy', 
+       color = 'Session Type') + 
+  theme_minimal() + 
+  theme(legend.position = 'bottom')
+
+
+#Test Outs------------------------------------------------------
+duosample |> 
+  group_by(user) |> 
+  mutate(user_accuracy = sum(label == 1)/sum(!is.na(label))) |> 
+  ungroup() |> 
+  ggplot(aes(x = user_accuracy)) +
+  geom_histogram() 
+
+
+duosample |> 
+  group_by(user, exercise_id) |> 
+  mutate(user_exer_accuracy = mean(label)) |> 
+  ungroup() |> 
+  ggplot(aes(x = days, 
+             y = user_exer_accuracy)) +
+  geom_point()
+
+#Can't Get to Work 
+duosample |> 
+  group_by(session, session_id, time) |> 
+  summarize(session_accuracy = mean(label), 
+         avg_time = mean(time)) |> 
+  ungroup() |> 
+  ggplot(aes(x = avg_time, 
+             y = session_accuracy, 
+             color = session)) + 
+  geom_smooth(method = 'lm', 
+              se = F) + 
+  labs(title = 'Session Accuracy vs Session Length', 
+       subtitle = '',
+       x = 'Time for the Session', 
+       y = 'Session Accuracy', 
+       color = 'Session Type') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
 ```
