@@ -246,14 +246,12 @@ ggplot(m_lasso_coefs,
 #SOMETHING VERY STRANGE HAPPENING HERE w/ iOS-------
 duosample |> 
   group_by(user, session_id) |> 
-  mutate(session_accuracy = mean(label)) |> 
+  mutate(user_session_accuracy = mean(label)) |> 
   ungroup() |> 
   ggplot(aes(x = days, 
-             y = session_accuracy, 
+             y = user_session_accuracy, 
              color = session)) + 
-  #geom_point() + 
-  geom_smooth(method = 'lm', 
-              se = F) + 
+  geom_smooth() + 
   facet_grid(~client) +
   labs(title = 'User Session Accuracy Over Time', 
        subtitle = '',
@@ -286,7 +284,22 @@ duodata |>
   ggplot(aes(x = days, 
              y = session_accuracy, 
              color = session)) + 
-  geom_smooth(method = 'lm') + 
+  geom_smooth() + 
+  labs(title = 'It All Adds Up', 
+       subtitle = 'Session Accuracy Over Time',
+       x = 'Days Since Starting Duolingo', 
+       y = 'Session Accuracy', 
+       color = 'Session Type') + 
+  theme_minimal() + 
+  theme(legend.position = 'bottom')
+
+duodata |> 
+  group_by(session_id) |> 
+  mutate(session_accuracy = mean(label)) |> 
+  ungroup() |> 
+  ggplot(aes(x = days, 
+             y = session_accuracy)) + 
+  geom_smooth() + 
   labs(title = 'It All Adds Up', 
        subtitle = 'Session Accuracy Over Time',
        x = 'Days Since Starting Duolingo', 
@@ -302,7 +315,8 @@ duosample |>
   mutate(user_accuracy = sum(label == 1)/sum(!is.na(label))) |> 
   ungroup() |> 
   ggplot(aes(x = user_accuracy)) +
-  geom_histogram() 
+  geom_histogram() + 
+  labs(title = 'Distribution of User Accuracy')
 
 
 duosample |> 
@@ -311,23 +325,22 @@ duosample |>
   ungroup() |> 
   ggplot(aes(x = days, 
              y = user_exer_accuracy)) +
-  geom_point()
+  geom_smooth() + 
+  labs(title = 'User Exercise Accuracy Over Time')
 
-#Can't Get to Work 
 duosample |> 
-  group_by(session, session_id, time) |> 
-  summarize(session_accuracy = mean(label), 
-         avg_time = mean(time)) |> 
+  group_by(session_id) |> 
+  mutate(avg_session_accuracy = mean(label), 
+         avg_session_time = mean(time)) |> 
   ungroup() |> 
-  ggplot(aes(x = avg_time, 
-             y = session_accuracy, 
+  ggplot(aes(x = avg_session_time, 
+             y = avg_session_accuracy, 
              color = session)) + 
-  geom_smooth(method = 'lm', 
-              se = F) + 
+  geom_smooth() + 
   labs(title = 'Session Accuracy vs Session Length', 
        subtitle = '',
-       x = 'Time for the Session', 
-       y = 'Session Accuracy', 
+       x = 'Average Time for the Session', 
+       y = 'Average Session Accuracy', 
        color = 'Session Type') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
