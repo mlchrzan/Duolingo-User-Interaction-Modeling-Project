@@ -345,3 +345,11 @@ duosample |>
   theme_minimal() +
   theme(legend.position = 'bottom')
 ```
+
+# Matias Idea for Missing Listening Prompt Data
+
+```{r}
+duodata |> 
+  group_by(exercise_id) |> 
+  filter(format == 'listen')
+```
