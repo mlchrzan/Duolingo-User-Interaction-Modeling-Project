@@ -350,6 +350,13 @@ duosample |>
 
 ```{r}
 duodata |> 
+  dplyr::select(-instance_id, 
+                -part_of_speech, 
+                -contains('dependency'), 
+                -countries) |> 
   group_by(exercise_id) |> 
-  filter(format == 'listen')
+  mutate(exercise_accuracy = mean(label)) |> 
+  ungroup() |> 
+  filter(format == 'listen') |> 
+  filter(exercise_accuracy == 1)
 ```
