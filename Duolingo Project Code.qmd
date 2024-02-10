@@ -123,7 +123,7 @@ duodata |>
 ## Distributions
 
 ```{r data-manipulations}
-#Session Accuracy and Session Time for each User for the entirety of their time
+#Session Accuracy and Session Time for each User for their entire time
 duodata |> 
   group_by(user) |> 
   mutate(avg_accuracy_user = mean(label), 
@@ -153,14 +153,15 @@ duodata |>
   dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session)
 
   
-#Number of Exercises per Day??
+#Number of Exercises per Day
 duodata |> 
   group_by(session_id) |>
   mutate(num_session_exercises = n_distinct(exercise_index)) |> 
   ungroup() |> 
   mutate(days_count = round(days)) |>
   group_by(user, days_count) |> 
-  mutate(avg_daily_num_exercise = mean(num_session_exercises))
+  mutate(avg_daily_num_exercise = mean(num_session_exercises)) |> 
+  dplyr::select(user, exercise_id, days_count, num_session_exercises, avg_daily_num_exercise)
 
 #Exercise Accuracy??
 duodata |> 
@@ -430,6 +431,8 @@ duodata |>
   mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt))
 
 #If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!)
+
+#pivot wide, merge the variables into one variable (use unite to combine them into one variable)
 
 #Could we also just remove prompt? 
 ```
