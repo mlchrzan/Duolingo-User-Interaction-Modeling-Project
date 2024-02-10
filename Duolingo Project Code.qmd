@@ -9,7 +9,15 @@ editor: visual
 
 Given a history of errors made by learners of a second language, the task is to predict errors that they are likely to make at arbitrary points in the future.
 
-# Research Question
+# Research Questions
+
+Our main research question is: What features best predict second-language-learners accuracy rates for correctly identifying a word in a Duolingo exercise?
+
+In addressing that question, we are also considering the following questions:
+
+-   What other user characteristics can we deduce from the provided data? How well do those derived characteristics predict user accuracy?
+
+-   Do certain features better predict word-accuracy versus exercise-accuracy?
 
 # Setup
 
@@ -34,15 +42,10 @@ duodata <- read_csv("data_flatformat.csv")
 
 # Examine Data
 
-```{r}
-n_distinct(duodata$user)
-```
-
 ```{r view-data}
 glimpse(duodata)
 duoskim <- skim(duodata)
 duoskim
-
 ```
 
 ## Missing Data
@@ -92,15 +95,85 @@ duodata |>
   arrange(desc(pct_miss))
 ```
 
-```{r remove-mis}
+```{r impute-data}
+duodata |> 
+  dplyr::select(-instance_id, 
+                -part_of_speech, 
+                -contains('dependency'), 
+                -countries) |> 
+  group_by(exercise_id) |> 
+  mutate(exercise_accuracy = mean(label)) |> 
+  ungroup() |> 
+  filter(format == 'listen') |> 
+  filter(exercise_accuracy == 1) |> 
+  mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt))
+
+#If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!)
+
+#Could we also just remove prompt? 
+```
+
+```{r remove-mis-remaining}
 #Prompt missing data is entirely on the listen format
 #Time missing data seems to mostly be a problem on iOS but Michael can't see a pattern beyond that. 
-#Both seem fair to Michael to remove
 
-duodata <- duodata |> na.omit()
+#duodata <- duodata |> na.omit()
 ```
 
 ## Distributions
+
+```{r data-manipulations}
+#Session Accuracy and Session Time for each User for the entirety of their time
+duodata |> 
+  group_by(user) |> 
+  mutate(avg_accuracy_user = mean(label), 
+         avg_session_time_user = mean(time), 
+         avg_days_user = mean(days)) |>
+  ungroup() |> 
+  dplyr::select(user, session_id, exercise_id, contains('avg'))
+
+#Session Accuracy and Session Time per Day
+#Is the day variable aligned for each user? i.e. If I skipped 2 days, is my day 2 the same as a continuous user's day 4? 
+duodata |> 
+  mutate(days_count = round(days)) |>
+  group_by(user, days_count) |> 
+  mutate(avg_daily_accuracy_user = mean(label), 
+         avg_daily_session_time_user = mean(time)) |> 
+  ungroup() |> 
+  dplyr::select(user, days, session_id, exercise_id, contains('avg'))
+
+#Number of Exercises per Session
+duodata |> 
+  group_by(session_id) |>
+  mutate(num_session_exercises = n_distinct(exercise_index)) |> 
+  ungroup() |> 
+  group_by(user) |> 
+  mutate(avg_exer_per_session = mean(num_session_exercises)) |> 
+  ungroup() |> 
+  dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session)
+
+  
+#Number of Exercises per Day??
+duodata |> 
+  group_by(session_id) |>
+  mutate(num_session_exercises = n_distinct(exercise_index)) |> 
+  ungroup() |> 
+  mutate(days_count = round(days)) |>
+  group_by(user, days_count) |> 
+  mutate(avg_daily_num_exercise = mean(num_session_exercises))
+
+#Exercise Accuracy??
+duodata |> 
+  group_by(exercise_id) |> 
+  mutate(avg_user_exer_accuracy = mean(label)) |> 
+  ungroup() |> 
+  dplyr::select(user, exercise_id, avg_user_exer_accuracy)
+
+
+#Removing Variables Not Included in our final analysis
+duodata |> 
+  dplyr::select(-country, -prompt)
+```
 
 ```{r viz-variable-dist}
 duodata |>
@@ -142,11 +215,6 @@ duodata |>
 ```{r check-countries}
 distinct(duodata, countries)
 #How should we handle multiple countries? 
-```
-
-```{r}
-duodata |> 
-  filter(days >= 1)
 ```
 
 # Split Data
@@ -358,5 +426,10 @@ duodata |>
   mutate(exercise_accuracy = mean(label)) |> 
   ungroup() |> 
   filter(format == 'listen') |> 
-  filter(exercise_accuracy == 1)
+  filter(exercise_accuracy == 1) |> 
+  mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt))
+
+#If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!)
+
+#Could we also just remove prompt? 
 ```
