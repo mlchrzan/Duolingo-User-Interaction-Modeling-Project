@@ -31,7 +31,13 @@ library(skimr)
 library(naniar)
 library(gt)
 library(MASS)
-library(glmnet)
+library(caret)
+library(vip)
+library(rpart.plot)
+library(randomForest)
+library(FactoMineR)
+library(factoextra)
+library(corrplot)
 ```
 
 ## Import Data
@@ -40,7 +46,7 @@ library(glmnet)
 duodata <- read_csv("data_flatformat.csv")
 ```
 
-# Examine Data
+# Explore Data
 
 ```{r view-data}
 glimpse(duodata)
@@ -163,6 +169,9 @@ duodata |>
   mutate(avg_daily_num_exercise = mean(num_session_exercises)) |> 
   dplyr::select(user, exercise_id, days_count, num_session_exercises, avg_daily_num_exercise)
 
+#Number of Sessions per Day
+
+
 #Exercise Accuracy??
 duodata |> 
   group_by(exercise_id) |> 
@@ -218,95 +227,7 @@ distinct(duodata, countries)
 #How should we handle multiple countries? 
 ```
 
-# Split Data
-
-```{r split-data}
-set.seed(1234) 
-train <- sample_frac(duodata, 0.8)
-test <- filter(duodata, !duodata$instance_id %in% train$instance_id) 
-```
-
-```{r logit}
-
-#How do we predict for specific users? Do we need to pivot wide?? 
-m_logit <- glm(label ~ part_of_speech + 
-                 days + 
-                 client + 
-                 session + 
-                 format + 
-                 time,
-               data = train, 
-               family = binomial(link = "logit"))
-
-summary(m_logit)
-```
-
-```{r ridge}
-train_matrix_x <- model.matrix(label ~ part_of_speech + 
-                                 days + 
-                                 client + 
-                                 session + 
-                                 format + 
-                                 time,
-                               data = train)
-
-
-train_matrix_y <- train |> 
-  dplyr::select(label)  |> 
-  as.matrix()
-
-m_ridge <- cv.glmnet(x = train_matrix_x,
-                     y = train_matrix_y,
-                     alpha = 0)
-
-plot(m_ridge, "lambda")
-
-m_ridge_coefs <- coef(m_ridge, s = "lambda.1se") 
-summary_m_ridge <- summary(m_ridge_coefs)
-
-m_ridge_coefs <- tibble(variable = rownames(m_ridge_coefs)[summary_m_ridge$i],
-                        coefficient = summary_m_ridge$x) |> 
-  filter(variable != "(Intercept)")
-
-ggplot(m_ridge_coefs, 
-       aes(y = variable, 
-           x = coefficient)) +
-  geom_segment(aes(y = variable,
-                   yend = variable, 
-                   x = 0, 
-                   xend = coefficient)) +
-  geom_point(size = 3) +
-  geom_vline(xintercept = 0, 
-             linetype = "dotted", 
-             color = "grey",
-             linewidth = 0.75) +
-  theme_bw()
-```
-
-```{r lasso}
-m_lasso <- cv.glmnet(x = train_matrix_x,
-                     y = train_matrix_y,
-                     alpha = 1)
-
-m_lasso_coefs <- coef(m_lasso, "lambda.1se") 
-summary_m_lasso <- summary(m_lasso_coefs)
-
-m_lasso_coefs <- tibble(variable = 
-                        rownames(m_lasso_coefs)[summary_m_lasso$i],
-                      coefficient = summary_m_lasso$x) |> 
-  filter(variable != "(Intercept)")
-
-ggplot(m_lasso_coefs, 
-       aes(y = variable, 
-           x = coefficient)) +
-  geom_segment(aes(y = variable,
-                   yend = variable, 
-                   x = 0, 
-                   xend = coefficient)) +
-  geom_point(size = 4, 
-             alpha = 0.6) +
-  theme_bw() 
-```
+# Examine Data
 
 ```{r viz for seminar}
 #Create a viz of x = time, y = accuracy measured by proportion of label that is 1
@@ -413,6 +334,104 @@ duosample |>
        color = 'Session Type') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
+```
+
+```{r pca}
+duo_pca <- PCA(dplyr::select(duodata, where(is.numeric)))
+```
+
+```{r examine-PCA}
+get_eigenvalue(duo_pca)
+fviz_eig(duo_pca, addlabels = TRUE)
+
+var <- get_pca_var(duo_pca)
+corrplot(var$cor, tl.col = "black", method = "color")
+
+var$cos2
+corrplot(var$cos2, 
+         is.corr = FALSE, 
+         tl.col = "black", 
+         method = "color")
+```
+
+# Build Model
+
+## Split Data
+
+```{r split-data}
+set.seed(1234) 
+train <- sample_frac(duodata, 0.8)
+test <- filter(duodata, !duodata$instance_id %in% train$instance_id) 
+```
+
+```{r build-rf}
+m_rf <- randomForest(label ~ . 
+                     -countries 
+                     - prompt 
+                     - instance_id 
+                     - exercise_id
+                     - session_id,
+                     data = train, 
+                     ntree = 100,
+                     mtry = 5)
+
+m_rf
+```
+
+```{r info-rf}
+vip(m_rf)
+
+#Error Rates
+error_rates <- as_tibble(m_rf$err.rate)
+error_rates <- error_rates |>
+  mutate(Tree = 1:nrow(error_rates)) |>
+  pivot_longer(cols = -Tree, names_to = "Type", values_to = "Error")
+ggplot(error_rates, aes(x = Tree, 
+                        y = Error, 
+                        color = Type)) + 
+  geom_line() +
+  theme_bw()
+
+plot(m_rf)
+```
+
+```{r predict-rf}
+predicted_closed <- predict(m_rf, test)
+confusion_rf <- table(predicted_closed, test$closed)
+confusion_rf
+accuracy_rf <- sum(diag(confusion_rf)) / nrow(test)
+accuracy_rf
+```
+
+```{r build-boost-rf}
+trControl = trainControl(method = "cv", number = 5)
+set.seed(1234)
+m_boost_rf <- train(label ~ . 
+                     -countries 
+                     - prompt 
+                     - instance_id 
+                     - exercise_id
+                     - session_id, 
+                   data = train, 
+                   method = "xgbTree", 
+                   trControl = trControl, 
+                   verbose = FALSE, 
+                   verbosity = 0)
+```
+
+```{r info-boost-rf}
+summary(m_boost_rf)
+plot(m_boost_rf)
+print(m_boost_rf)
+varImp(m_boost_rf)
+```
+
+```{r predict-rf}
+predicted_closed <- predict(m_boost_rf, test)
+confusion_boost_rf <- table(predicted_closed, test$closed)
+confusion_boost_rf
+accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(test)
+accuracy_boost_rf
 ```
 
 # Matias Idea for Missing Listening Prompt Data
