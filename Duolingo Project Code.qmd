@@ -66,7 +66,7 @@ vis_miss(duosample,
 miss_var_summary(duosample)
 
 duosample_mis <- duosample |> 
-  select(prompt, time, client, format, session)
+  dplyr::select(prompt, time, client, format, session)
 
 gg_miss_var(duosample_mis)
 gg_miss_var(duosample_mis, 
@@ -123,10 +123,10 @@ duodata |>
 #Prompt missing data is entirely on the listen format
 #Time missing data seems to mostly be a problem on iOS but Michael can't see a pattern beyond that. 
 
-#duodata <- duodata |> na.omit()
+duodata <- duodata |> 
+  dplyr::select(-prompt) |> 
+  na.omit()
 ```
-
-## Distributions
 
 ```{r data-manipulations}
 #Session Accuracy and Session Time for each User for their entire time
@@ -182,7 +182,7 @@ duodata |>
 
 #Removing Variables Not Included in our final analysis
 duodata |> 
-  dplyr::select(-country, -prompt)
+  dplyr::select(-countries)
 ```
 
 ```{r viz-variable-dist}
@@ -334,6 +334,8 @@ duosample |>
        color = 'Session Type') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
+
+#What parts of speech do people most get wrong??
 ```
 
 ```{r pca}
@@ -365,9 +367,8 @@ test <- filter(duodata, !duodata$instance_id %in% train$instance_id)
 ```
 
 ```{r build-rf}
-m_rf <- randomForest(label ~ . 
+m_rf <- randomForest(as_factor(label) ~ . 
                      -countries 
-                     - prompt 
                      - instance_id 
                      - exercise_id
                      - session_id,
