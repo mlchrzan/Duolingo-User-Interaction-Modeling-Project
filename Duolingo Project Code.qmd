@@ -455,9 +455,7 @@ accuracy_rf
 ```{r build-boost-rf}
 trControl = trainControl(method = "cv", number = 5)
 set.seed(1234)
-m_boost_rf <- train(label ~ . 
-                     -countries 
-                     - prompt 
+m_boost_rf <- train(as.factor(label) ~ . 
                      - instance_id 
                      - exercise_id
                      - session_id, 
@@ -476,8 +474,16 @@ varImp(m_boost_rf)
 ```
 
 ```{r predict-rf}
-predicted_closed <- predict(m_boost_rf, test)
-confusion_boost_rf <- table(predicted_closed, test$closed)
+#Train
+predicted_label <- predict(m_boost_rf, test)
+confusion_boost_rf <- table(predicted_label, test$label)
+confusion_boost_rf
+accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(test)
+accuracy_boost_rf
+
+#Test
+predicted_label <- predict(m_boost_rf, test)
+confusion_boost_rf <- table(predicted_label, test$label)
 confusion_boost_rf
 accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(test)
 accuracy_boost_rf
