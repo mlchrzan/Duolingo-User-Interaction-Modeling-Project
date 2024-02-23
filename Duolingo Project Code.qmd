@@ -82,149 +82,190 @@ gg_miss_upset(duosample_mis)
 
 ```
 
-```{r mis-prompt}
-#Examining Missiningness Related to Prompt and Time with Other Variables
-#Is all the missing prompt data in format? Appears so (NOTE, not the sample, full dataset)
-
-#Prompt
+```{r examine-mis-prompt}
+#Examining Missiningness Related to Prompt and Time with Other Variables #Is all the missing prompt data in format? Appears so (NOTE, not the sample now, full dataset) 
+#Prompt 
 duodata |> 
   dplyr::select(prompt, format, session, client) |> 
   group_by(format, session, client) |> 
-  miss_var_summary() |>
-  arrange(desc(pct_miss))
+  miss_var_summary() |> 
+  arrange(desc(pct_miss)) 
 
-#Time
+#Time 
 duodata |> 
   dplyr::select(time, format, session, client) |> 
   group_by(format, session, client) |> 
-  miss_var_summary() |>
+  miss_var_summary() |> 
   arrange(desc(pct_miss))
 ```
 
-```{r impute-data}
+```{r handle-missing}
+
 duodata |> 
-  dplyr::select(-instance_id, 
-                -part_of_speech, 
-                -contains('dependency'), 
-                -countries) |> 
   group_by(exercise_id) |> 
-  mutate(exercise_accuracy = mean(label)) |> 
-  ungroup() |> 
-  filter(format == 'listen') |> 
-  filter(exercise_accuracy == 1) |> 
-  mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt))
+  mutate(exercise_accuracy = mean(label)) |> ungroup() |> 
+  filter(format == 'listen') |>
+  filter(exercise_accuracy == 1) |>
+  mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt)) |> 
+  dplyr::select(-instance_id,
+                -part_of_speech,
+                -contains('dependency'), -countries) 
 
-#If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!)
+#If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!) 
 
-#Could we also just remove prompt? 
+#Could we also just remove prompt? Prompt missing data is entirely on the listen format and probably wouldn't help with predictions. 
+
+#Time missing data seems to mostly be a problem on iOS but Michael can't see a pattern beyond that. 
 ```
 
-```{r remove-mis-remaining}
-#Prompt missing data is entirely on the listen format
-#Time missing data seems to mostly be a problem on iOS but Michael can't see a pattern beyond that. 
+# Data Cleaning
 
+```{r remove-mis-remaining}
 duodata <- duodata |> 
   dplyr::select(-prompt) |> 
   na.omit()
 ```
 
-```{r data-manipulations}
-#Session Accuracy and Session Time for each User for their entire time
+```{r viz-variable-dist}
 duodata |> 
+  pivot_longer(cols = c(part_of_speech, client, session, format), 
+               names_to = "variable", 
+               values_to = "value") |> 
+  ggplot() + geom_bar(aes(value)) + 
+  facet_wrap(. ~ variable, scales = "free") + 
+  coord_flip() 
+
+duodata |> 
+  pivot_longer(cols = c(dependency_label, countries), 
+               names_to = "variable", 
+               values_to = "value") |> 
+  ggplot() + 
+  geom_bar(aes(value)) + 
+  facet_wrap(. ~ variable, scales = "free") + 
+  coord_flip() 
+
+duodata |> 
+  pivot_longer(cols = where(is.numeric), 
+               names_to = "variable", 
+               values_to = "value") |> 
+  ggplot() + 
+  geom_histogram(aes(value)) + 
+  facet_wrap(. ~ variable, scales = "free") 
+
+#Should we include folks at 0 days?
+
+```
+
+```{r check-data}
+distinct(duodata, countries) 
+
+#Checking Time Values 
+duodata |> 
+  group_by(user) |> 
+  mutate(avg_time = mean(time)) |> 
+  dplyr::select(avg_time, time) |> 
+  arrange(desc(time)) 
+
+#QTNA: Why don't some users have an avg_time but have time? #Number of Users with ONLY less than 1 day, 52 - resulting in ~30000 rows 
+
+one_days <- duodata |> 
+  group_by(user) |> 
+  mutate(max_days = max(days)) |> 
+  ungroup() |> 
+  filter(max_days < 1) 
+
+n_distinct(one_days$user) 
+
+#Curious if there's any patterns in how these folks use it rather than others. #Notice from the histogram that users trail off as days increases.
+
+#Proportion of Correct Responses, 14.62% 
+sum(duodata$label == 1)/sum(duodata$label == 0)
+
+```
+
+```{r clean-data}
+
+```
+
+```{r variable-creation}
+#Averge Accuracy, Session Time, and Days for each User for their entire time 
+duodata <- duodata |> 
   group_by(user) |> 
   mutate(avg_accuracy_user = mean(label), 
          avg_session_time_user = mean(time), 
-         avg_days_user = mean(days)) |>
-  ungroup() |> 
-  dplyr::select(user, session_id, exercise_id, contains('avg'))
+         avg_days_user = mean(days)) |> 
+  ungroup()
+  #dplyr::select(user, session_id, exercise_id, contains('avg')) 
 
-#Session Accuracy and Session Time per Day
-#Is the day variable aligned for each user? i.e. If I skipped 2 days, is my day 2 the same as a continuous user's day 4? 
-duodata |> 
-  mutate(days_count = round(days)) |>
+#Averge Session Accuracy per User and Session Time per Day 
+#Is the day variable aligned for each user? i.e. If I skipped 2 days, is my day 2 the same as a continuous user's day 4? Right now I am assuming yes for all 
+duodata <- duodata |> 
+  mutate(days_count = round(days)) |> 
   group_by(user, days_count) |> 
   mutate(avg_daily_accuracy_user = mean(label), 
          avg_daily_session_time_user = mean(time)) |> 
-  ungroup() |> 
-  dplyr::select(user, days, session_id, exercise_id, contains('avg'))
+  ungroup() 
+  #dplyr::select(user, days, session_id, exercise_id, contains('avg')) 
 
-#Number of Exercises per Session
-duodata |> 
-  group_by(session_id) |>
-  mutate(num_session_exercises = n_distinct(exercise_index)) |> 
+#Averge Number of Exercises per Session and Number of Exercises by Section 
+duodata <- duodata |> 
+  group_by(session_id) |> 
+  mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
+  ungroup() |> 
+  group_by(user) |>
+  mutate(avg_exercises_per_session = mean(num_exercises_this_session)) |>
+  ungroup() 
+  #dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session) 
+
+#Averge Number of Exercises per Day and Number of Exercises by Section 
+duodata <- duodata |> 
+  group_by(session_id) |> 
+  mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
+  ungroup() |> 
+  mutate(days_count = round(days)) |> 
+  group_by(user, days_count) |> 
+  mutate(avg_daily_num_exercise = mean(num_exercises_this_session)) 
+  #dplyr::select(user, exercise_id, days_count, num_session_exercises, avg_daily_num_exercise) 
+
+#Averge Number of Sessions per Day and Number of Sessions By Day 
+duodata <- duodata |> 
+  mutate(days_count = round(days)) |> 
+  group_by(user, days_count) |> 
+  mutate(num_sessions_this_day = n_distinct(session_id)) |> 
   ungroup() |> 
   group_by(user) |> 
-  mutate(avg_exer_per_session = mean(num_session_exercises)) |> 
-  ungroup() |> 
-  dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session)
+  mutate(avg_num_sessions = mean(num_sessions_this_day)) 
+  #dplyr::select(user, days_count, session_id, num_sessions_this_day, avg_num_sessions) 
 
-  
-#Number of Exercises per Day
-duodata |> 
-  group_by(session_id) |>
-  mutate(num_session_exercises = n_distinct(exercise_index)) |> 
-  ungroup() |> 
-  mutate(days_count = round(days)) |>
-  group_by(user, days_count) |> 
-  mutate(avg_daily_num_exercise = mean(num_session_exercises)) |> 
-  dplyr::select(user, exercise_id, days_count, num_session_exercises, avg_daily_num_exercise)
-
-#Number of Sessions per Day
-
-
-#Exercise Accuracy??
-duodata |> 
+#Accuracy by Exercise and Average Accuracy by User 
+duodata <- duodata |> 
   group_by(exercise_id) |> 
-  mutate(avg_user_exer_accuracy = mean(label)) |> 
+  mutate(exercise_accuracy = mean(label)) |> 
   ungroup() |> 
-  dplyr::select(user, exercise_id, avg_user_exer_accuracy)
+  group_by(user) |> 
+  mutate(avg_exercise_accuracy = mean(exercise_accuracy)) 
+  #dplyr::select(user, exercise_id, exercise_accuracy, avg_exercise_accuracy) 
+#Number of of Countries by User 
+duodata <- duodata |> 
+  group_by(user) |> 
+  mutate(country_count = str_count(countries, ",") + 1) |> 
+  ungroup() 
+  #dplyr::select(countries, country_count) |> #arrange(desc(country_count)) 
 
 
-#Removing Variables Not Included in our final analysis
+#Removing Variables not included in our final analysis 
+duodata <- duodata |> dplyr::select(-countries)
+
+```
+
+```{r check-new-distributions}
 duodata |> 
-  dplyr::select(-countries)
-```
-
-```{r viz-variable-dist}
-duodata |>
-  pivot_longer(cols = c(part_of_speech, 
-                        client, 
-                        session, 
-                        format),
-               names_to = "variable",
-               values_to = "value") |>
-  ggplot() +
-  geom_bar(aes(value)) +
-  facet_wrap(. ~ variable, 
-             scales = "free") + 
-  coord_flip()
-
-duodata |>
-  pivot_longer(cols = c(dependency_label, 
-                        countries),
-               names_to = "variable",
-               values_to = "value") |>
-  ggplot() +
-  geom_bar(aes(value)) +
-  facet_wrap(. ~ variable, 
-             scales = "free") + 
-  coord_flip()
-
-duodata |>
   pivot_longer(cols = where(is.numeric), 
-               names_to = "variable",
-               values_to = "value") |>
-  ggplot() +
-  geom_histogram(aes(value)) +
-  facet_wrap(. ~ variable, 
-             scales = "free") 
-
-#Should we include folks at 0 days?
-```
-
-```{r check-countries}
-distinct(duodata, countries)
-#How should we handle multiple countries? 
+               names_to = "variable", 
+               values_to = "value") |> 
+  ggplot() + 
+  geom_histogram(aes(value)) + 
+  facet_wrap(. ~ variable, scales = "free") 
 ```
 
 # Examine Data
@@ -433,26 +474,4 @@ confusion_boost_rf <- table(predicted_closed, test$closed)
 confusion_boost_rf
 accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(test)
 accuracy_boost_rf
-```
-
-# Matias Idea for Missing Listening Prompt Data
-
-```{r}
-duodata |> 
-  dplyr::select(-instance_id, 
-                -part_of_speech, 
-                -contains('dependency'), 
-                -countries) |> 
-  group_by(exercise_id) |> 
-  mutate(exercise_accuracy = mean(label)) |> 
-  ungroup() |> 
-  filter(format == 'listen') |> 
-  filter(exercise_accuracy == 1) |> 
-  mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt))
-
-#If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!)
-
-#pivot wide, merge the variables into one variable (use unite to combine them into one variable)
-
-#Could we also just remove prompt? 
 ```
