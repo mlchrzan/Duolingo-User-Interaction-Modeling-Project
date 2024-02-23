@@ -408,8 +408,7 @@ test <- filter(duodata, !duodata$instance_id %in% train$instance_id)
 ```
 
 ```{r build-rf}
-m_rf <- randomForest(as_factor(label) ~ . 
-                     -countries 
+m_rf <- randomForest(as_factor(label) ~ .
                      - instance_id 
                      - exercise_id
                      - session_id,
@@ -438,8 +437,16 @@ plot(m_rf)
 ```
 
 ```{r predict-rf}
-predicted_closed <- predict(m_rf, test)
-confusion_rf <- table(predicted_closed, test$closed)
+#Train
+predicted_label <- predict(m_rf, train)
+confusion_rf <- table(predicted_label, train$label)
+confusion_rf
+accuracy_rf <- sum(diag(confusion_rf)) / nrow(train)
+accuracy_rf
+
+#Test
+predicted_label <- predict(m_rf, test)
+confusion_rf <- table(predicted_label, test$label)
 confusion_rf
 accuracy_rf <- sum(diag(confusion_rf)) / nrow(test)
 accuracy_rf
