@@ -409,6 +409,7 @@ test <- filter(duodata, !duodata$instance_id %in% train$instance_id)
 
 ```{r build-rf}
 m_rf <- randomForest(as_factor(label) ~ .
+                     - exercise_accuracy
                      - instance_id 
                      - exercise_id
                      - session_id,
@@ -456,6 +457,14 @@ accuracy_rf
 trControl = trainControl(method = "cv", number = 5)
 set.seed(1234)
 m_boost_rf <- train(as.factor(label) ~ . 
+                    - token
+                    - dependency_label 
+                    - dependency_edge_head
+                    - exercise_accuracy 
+                    - token_index
+                    - days_count 
+                    - part_of_speech 
+                    - user
                      - instance_id 
                      - exercise_id
                      - session_id, 
@@ -475,10 +484,10 @@ varImp(m_boost_rf)
 
 ```{r predict-rf}
 #Train
-predicted_label <- predict(m_boost_rf, test)
-confusion_boost_rf <- table(predicted_label, test$label)
+predicted_label <- predict(m_boost_rf, train)
+confusion_boost_rf <- table(predicted_label, train$label)
 confusion_boost_rf
-accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(test)
+accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(train)
 accuracy_boost_rf
 
 #Test
