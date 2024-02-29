@@ -401,6 +401,19 @@ corrplot(var$cos2,
 
 ## Split Data
 
+```{r split-data-on-user}
+set.seed(1234)
+
+unique_users <- unique(duodata$user)
+
+# Randomly split unique users into training and testing sets
+train_users <- sample(unique_users, size = floor(0.8 * length(unique_users)))
+
+# Create traiing and testing sets based on user split
+train_by_users <- duodata |> filter(user %in% train_users)
+test_by_users <- duodata |> filter(!(user %in% train_users))
+```
+
 ```{r split-data}
 set.seed(1234) 
 train <- sample_frac(duodata, 0.8)
