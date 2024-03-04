@@ -212,10 +212,10 @@ sum(duodata$label == 1)/sum(duodata$label == 0)
 
 #Substituting extreme values with seemingly reasonable maximums
   
-  #Removing folks with logging issues (time < 1) as noted in the documentation
+  #Removing instances with logging issues (time < 1) as noted in the documentation
 duodata <- duodata |> 
   filter(time > 1)
-  #Replacing users who used the app longer than 14 hours with 14 hours as their 
+  #Replacing users who used the app longer than 14 hours with 14 hours as their max
 duodata$time <- Winsorize(duodata$time,
                           maxval = 50400, 
                           na.rm = TRUE)
@@ -427,7 +427,9 @@ rm(lesson_day_user)
 #Number of Session by Type for ALL Users
 tot_sess_type <- duodata |> 
   group_by(session) |> 
-  summarize(total_session_type = n_distinct(session_id))
+  summarize(total_session_type = n_distinct(session_id),
+            .groups = 'keep') |> 
+  ungroup()
 
 duodata <- left_join(duodata, tot_sess_type, join_by(session))
   
@@ -439,7 +441,8 @@ tot_sess_t_d <- duodata |>
   mutate(days_round = round(days)) |> 
   group_by(session, days_round) |> 
   summarize(total_session_type_day = n_distinct(session_id), 
-            .groups = 'keep')
+            .groups = 'keep') |> 
+  ungroup()
 
 duodata <- left_join(duodata |> mutate(days_round = round(days)), 
           tot_sess_t_d, 
@@ -447,30 +450,58 @@ duodata <- left_join(duodata |> mutate(days_round = round(days)),
   dplyr::select(-days_round)
 
 rm(tot_sess_t_d)
+
   
+#OTHER
+
 
 #Get Number of Days Skipped by User
-#THIS WILL ONLY CATCH IT IF THE SESSION GOES OVER A DAY LONG
-#Maybe round days? Need a row that is just user and 1 day for lag strategy to work
-  #Summarize?? 
-duodata |> 
-  group_by(user, session_id) |> 
-  mutate(day_gap = days - dplyr::lag(days), 
-         day_gap = if_else(is.na(day_gap), 0, day_gap)) |>
-  dplyr::select(user, session_id, days, day_gap) 
+skipped <- duodata |>
+  mutate(days_round_down = floor(days)) |> 
+  group_by(user, days_round_down) |> 
+  summarise(.groups = 'keep') |>
+  ungroup() |> 
+  mutate(days_skipped_user = days_round_down - dplyr::lag(days_round_down) - 1) |> 
+  ungroup() |> 
+  mutate(days_skipped_user = if_else(is.na(days_skipped_user) | days_skipped_user < 0, 
+                                     0, 
+                                     days_skipped_user))
 
+duodata <- left_join(duodata |> mutate(days_round_down = floor(days)), 
+          skipped, 
+          by = join_by(user, days_round_down)) |> 
+  dplyr::select(-days_round_down) 
 
-#OTHER
+rm(skipped)
+
 #Get Last Day User Used App
 duodata <- duodata |> 
   group_by(user) |> 
   mutate(drop_day = max(round(days))) 
 
 
+#TIDY UP
+
+
 #Removing Variables not included in our final analysis 
+
 duodata <- duodata |> dplyr::select(-countries)
 
-#Should we remove variables related to tokens-level info? 
+#Should we remove variables related to tokens-level info? Michael wasn't sure
+#IF WE ARE, CODE BELOW SHOULD DO IT
+# duodata <- duodata |> dplyr::select(-token, 
+#                                     -part_of_speech, 
+#                                     -dependency_label, 
+#                                     -dependency_edge_head,
+#                                     -token_index, 
+#                                     -instance_id)
+
+#Removing Duplicated Rows (each row is still based on the tokens, so there are duplicates)
+#duodata <- distinct(duodata)
+
+#Check New Unit of Analysis
+# n_distinct(duodata$exercise_id)
+# distinct(duodata)
 ```
 
 ```{r check-new-distributions}
