@@ -7,17 +7,11 @@ editor: visual
 
 # Introduction
 
-Given a history of errors made by learners of a second language, the task is to predict errors that they are likely to make at arbitrary points in the future.
+...
 
 # Research Questions
 
-Our main research question is: What features best predict second-language-learners accuracy rates for correctly identifying a word in a Duolingo exercise?
-
-In addressing that question, we are also considering the following questions:
-
--   What other user characteristics can we deduce from the provided data? How well do those derived characteristics predict user accuracy?
-
--   Do certain features better predict word-accuracy versus exercise-accuracy?
+...
 
 # Setup
 
@@ -38,6 +32,8 @@ library(randomForest)
 library(FactoMineR)
 library(factoextra)
 library(corrplot)
+library(mclust)
+library(DescTools)
 ```
 
 ## Import Data
@@ -49,7 +45,7 @@ duodata <- read_csv("data_flatformat.csv")
 # Explore Data
 
 ```{r view-data}
-glimpse(duodata)
+#glimpse(duodata)
 duoskim <- skim(duodata)
 duoskim
 ```
@@ -101,17 +97,18 @@ duodata |>
 
 ```{r handle-missing}
 
-duodata |> 
-  group_by(exercise_id) |> 
-  mutate(exercise_accuracy = mean(label)) |> ungroup() |> 
-  filter(format == 'listen') |>
-  filter(exercise_accuracy == 1) |>
-  mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt)) |> 
-  dplyr::select(-instance_id,
-                -part_of_speech,
-                -contains('dependency'), -countries) 
+#JUST GOING TO REMOVE PROMPT
+# duodata |> 
+#   group_by(exercise_id) |> 
+#   mutate(exercise_accuracy = mean(label)) |> ungroup() |> 
+#   filter(format == 'listen') |>
+#   filter(exercise_accuracy == 1) |>
+#   mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt)) |> 
+#   dplyr::select(-instance_id,
+#                 -part_of_speech,
+#                 -contains('dependency'), -countries) 
 
-#If we can get the exact prompt, we can match it to users who got it wrong (ask Sanne!) 
+#If we can get the exact prompt, we can match it to users who got it wrong
 
 #Could we also just remove prompt? Prompt missing data is entirely on the listen format and probably wouldn't help with predictions. 
 
@@ -160,14 +157,36 @@ duodata |>
 distinct(duodata, countries) 
 
 #Checking Time Values 
+summary(duodata$time)
+duodata |> 
+  ggplot(aes(x = time)) + 
+  geom_histogram()
+
+  #Checking average user time
 duodata |> 
   group_by(user) |> 
   mutate(avg_time = mean(time)) |> 
   dplyr::select(avg_time, time) |> 
-  arrange(desc(time)) 
+  arrange(desc(time))
+      #QTNA: Why don't some users have an avg_time but have time? #Number of Users with ONLY        less than 1 day, 52 - resulting in ~30000 rows 
 
-#QTNA: Why don't some users have an avg_time but have time? #Number of Users with ONLY less than 1 day, 52 - resulting in ~30000 rows 
+  #This shows that 60 users used the app for longer than 14 hours in one session
+duodata |> 
+  group_by(user) |> 
+  summarize(max_time = max(time)) |> 
+  arrange(desc(max_time)) |> 
+  filter(max_time < 50400)
 
+
+#Large Dependency Edge Head Value (originally 442 rows larger than 10)
+summary(duodata$dependency_edge_head)
+duodata |> 
+  ggplot(aes(x = dependency_edge_head)) + 
+  geom_histogram()
+
+
+
+#Users who used the app less than 1 day
 one_days <- duodata |> 
   group_by(user) |> 
   mutate(max_days = max(days)) |> 
@@ -175,8 +194,8 @@ one_days <- duodata |>
   filter(max_days < 1) 
 
 n_distinct(one_days$user) 
-
-#Curious if there's any patterns in how these folks use it rather than others. #Notice from the histogram that users trail off as days increases.
+#Curious if there's any patterns in how these folks use it rather than others. 
+#Michael noticed from the histogram that users trail off as days increases.
 
 #Proportion of Correct Responses, 14.62% 
 sum(duodata$label == 1)/sum(duodata$label == 0)
@@ -184,10 +203,27 @@ sum(duodata$label == 1)/sum(duodata$label == 0)
 ```
 
 ```{r clean-data}
+#NOT SURE REPLACEMENT MAKES SENSE HERE OR REMOVAL, DO WE JUST LEAVE IT?? 
+#Dependency edge heads
+# duodata$dependency_edge_head <- Winsorize(duodata$dependency_edge_head, 
+#                                           minval = 0,
+#                                           maxval = 7, 
+#                                           na.rm = TRUE)
 
+#Substituting extreme values with seemingly reasonable maximums
+  
+  #Removing folks with logging issues (time < 1) as noted in the documentation
+duodata <- duodata |> 
+  filter(time > 1)
+  #Replacing users who used the app longer than 14 hours with 14 hours as their 
+duodata$time <- Winsorize(duodata$time,
+                          maxval = 50400, 
+                          na.rm = TRUE)
 ```
 
 ```{r variable-creation}
+#AVERAGES
+
 #Averge Accuracy, Session Time, and Days for each User for their entire time 
 duodata <- duodata |> 
   group_by(user) |> 
@@ -198,7 +234,9 @@ duodata <- duodata |>
   #dplyr::select(user, session_id, exercise_id, contains('avg')) 
 
 #Averge Session Accuracy per User and Session Time per Day 
+
 #Is the day variable aligned for each user? i.e. If I skipped 2 days, is my day 2 the same as a continuous user's day 4? Right now I am assuming yes for all 
+
 duodata <- duodata |> 
   mutate(days_count = round(days)) |> 
   group_by(user, days_count) |> 
@@ -245,17 +283,98 @@ duodata <- duodata |>
   group_by(user) |> 
   mutate(avg_exercise_accuracy = mean(exercise_accuracy)) 
   #dplyr::select(user, exercise_id, exercise_accuracy, avg_exercise_accuracy) 
-#Number of of Countries by User 
+
+
+#TOTALS
+
+#Total Number of of Countries by User 
 duodata <- duodata |> 
   group_by(user) |> 
   mutate(country_count = str_count(countries, ",") + 1) |> 
   ungroup() 
   #dplyr::select(countries, country_count) |> #arrange(desc(country_count)) 
 
+#Total Time Spent on App by User
+user_times <- duodata |> 
+  group_by(user, exercise_id) |> 
+  summarize(total_time_exer = sum(time), 
+            .groups = 'keep') |> 
+  ungroup() |> 
+  group_by(user) |> 
+  summarise(total_time = mean(total_time_exer), 
+            .groups = 'keep')
+
+duodata <- left_join(duodata, user_times, by = join_by(user))
+rm(user_times)
+
+#Total Number of Exercises per User
+tot_exer <- duodata |> 
+  group_by(user) |> 
+  summarize(tot_exercises = n_distinct(exercise_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, tot_exer, by = join_by(user))
+rm(tot_exer)
+
+#Total Number of Sessions per User
+tot_sess <-  duodata |> 
+  group_by(user) |> 
+  summarize(tot_sessions = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, tot_sess, by = join_by(user))
+rm(tot_sess)
+
+#Total Number of Session by Type per User
+  #Test
+n_test <- duodata |> 
+  filter(session == 'test') |> 
+  group_by(user) |>
+  summarize(tot_test = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, n_test, by = join_by(user))
+rm(n_test)
+
+  #Practice
+n_practice <- duodata |> 
+  filter(session == 'practice') |> 
+  group_by(user) |>
+  summarize(tot_practice = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, n_practice, by = join_by(user))
+rm(n_practice)
+
+  #Lesson
+n_lesson <- duodata |> 
+  filter(session == 'lesson') |> 
+  group_by(user) |>
+  summarize(tot_lesson = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, n_lesson, by = join_by(user))
+rm(n_lesson)
+  
+
+#Get Number of Days Skipped by User
+#THIS WILL ONLY CATCH IT IF THE SESSION GOES OVER A DAY LONG
+duodata |> 
+  group_by(user, session_id) |> 
+  mutate(day_gap = days - dplyr::lag(days), 
+         day_gap = if_else(is.na(day_gap), 0, day_gap)) |>
+  dplyr::select(session_id, days, day_gap)
+
+
+#OTHER
+#Get Last Day User Used App
+duodata <- duodata |> 
+  group_by(user) |> 
+  mutate(drop_day = max(round(days))) 
+
 
 #Removing Variables not included in our final analysis 
 duodata <- duodata |> dplyr::select(-countries)
-
 ```
 
 ```{r check-new-distributions}
@@ -269,6 +388,29 @@ duodata |>
 ```
 
 # Examine Data
+
+```{r}
+duodata |> 
+  group_by(user) |> 
+  summarize(last_day = max(days)) |> 
+  ggplot(aes(x = last_day)) + 
+  geom_histogram(fill = "#7ac70c") + 
+  labs(title = 'User Retention Over Time',
+       subtitle = 'Number of Users Returning to Duolingo Each Day Decreases Over Time', 
+       x = 'Days', 
+       y = 'Number of Users Lost') +
+  theme_minimal()
+
+duodata |> 
+  ggplot(aes(x = days)) + 
+  geom_histogram(fill = "#7ac70c") + 
+  labs(title = 'User Engagement Over Time',
+       subtitle = 'Number of Words Translated on Duolingo Each Day Steadily Decreases', 
+       x = 'Days', 
+       y = 'Number of Activities') +
+  scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
+  theme_minimal() 
+```
 
 ```{r viz for seminar}
 #Create a viz of x = time, y = accuracy measured by proportion of label that is 1
@@ -395,6 +537,55 @@ corrplot(var$cos2,
          is.corr = FALSE, 
          tl.col = "black", 
          method = "color")
+```
+
+# Create Clusters
+
+```{r hierarchical}
+duodata_clust <- duodata |> 
+  dplyr::select(-part_of_speech, -dependency_label, -dependency_edge_head, -exercise_index, -token_index, -token, - label)
+
+duo_diff <- dist(duodata_clust, method = "euclidean")
+duo_hc_c <- hclust(duo_diff, method = "complete")
+
+duo_dend <- as.dendrogram(duo_hc_c)|> 
+  color_labels(k = 3)  |> 
+  color_branches(k = 3)
+
+duo_dend |> 
+  set("labels_cex", 0.5) |> 
+  plot(main = "Complete")
+```
+
+```{r Gaussian}
+#library(mclust)
+#How do we make it cluster by user not by instance??
+duodata |> 
+  group_by(user) |> 
+  summarize()
+
+
+set.seed(1234)
+gmm_1 <- Mclust(data = duodata, 
+                G = 4)
+summary(gmm_1)
+
+gmm_preds <- predict(gmm_1)
+
+duodata_gmm <- bind_cols(duodata, gmm_preds$classification) |> 
+  rename(gmm_cluster = ...31)
+
+duodata_gmm |> 
+  dplyr::select(instance_id, user, gmm_cluster) |> 
+  summarize(avg_clust = median(gmm_cluster))
+
+# #To assign back to the data
+# gmm_preds <- predict(gmm_1)
+# 
+# d1_gmm <- bind_cols(d1, gmm_preds$z) |> 
+#   mutate(.cluster = gmm_preds$classification)
+# 
+# d1_gmm
 ```
 
 # Build Model
