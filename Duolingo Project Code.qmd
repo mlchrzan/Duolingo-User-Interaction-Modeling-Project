@@ -166,7 +166,7 @@ duodata |>
 duodata |> 
   group_by(user) |> 
   mutate(avg_time = mean(time)) |> 
-  dplyr::select(avg_time, time) |> 
+  dplyr::select(user, avg_time, time) |> 
   arrange(desc(time))
       #QTNA: Why don't some users have an avg_time but have time? #Number of Users with ONLY        less than 1 day, 52 - resulting in ~30000 rows 
 
@@ -245,7 +245,8 @@ duodata <- duodata |>
   ungroup() 
   #dplyr::select(user, days, session_id, exercise_id, contains('avg')) 
 
-#Averge Number of Exercises per Session and Number of Exercises by Section 
+
+#Averge Number of Exercises per Session and Number of Exercises by Session_id 
 duodata <- duodata |> 
   group_by(session_id) |> 
   mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
@@ -255,7 +256,8 @@ duodata <- duodata |>
   ungroup() 
   #dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session) 
 
-#Averge Number of Exercises per Day and Number of Exercises by Section 
+
+#Averge Number of Exercises per Day and Number of Exercises by Session_id 
 duodata <- duodata |> 
   group_by(session_id) |> 
   mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
@@ -275,6 +277,7 @@ duodata <- duodata |>
   mutate(avg_num_sessions = mean(num_sessions_this_day)) 
   #dplyr::select(user, days_count, session_id, num_sessions_this_day, avg_num_sessions) 
 
+
 #Accuracy by Exercise and Average Accuracy by User 
 duodata <- duodata |> 
   group_by(exercise_id) |> 
@@ -287,12 +290,14 @@ duodata <- duodata |>
 
 #TOTALS
 
+
 #Total Number of of Countries by User 
 duodata <- duodata |> 
   group_by(user) |> 
   mutate(country_count = str_count(countries, ",") + 1) |> 
   ungroup() 
   #dplyr::select(countries, country_count) |> #arrange(desc(country_count)) 
+
 
 #Total Time Spent on App by User
 user_times <- duodata |> 
@@ -307,30 +312,33 @@ user_times <- duodata |>
 duodata <- left_join(duodata, user_times, by = join_by(user))
 rm(user_times)
 
+
 #Total Number of Exercises per User
 tot_exer <- duodata |> 
   group_by(user) |> 
-  summarize(tot_exercises = n_distinct(exercise_id)) |> 
+  summarize(total_exercises = n_distinct(exercise_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, tot_exer, by = join_by(user))
 rm(tot_exer)
 
+
 #Total Number of Sessions per User
 tot_sess <-  duodata |> 
   group_by(user) |> 
-  summarize(tot_sessions = n_distinct(session_id)) |> 
+  summarize(total_sessions = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, tot_sess, by = join_by(user))
 rm(tot_sess)
+
 
 #Total Number of Session by Type per User
   #Test
 n_test <- duodata |> 
   filter(session == 'test') |> 
   group_by(user) |>
-  summarize(tot_test = n_distinct(session_id)) |> 
+  summarize(total_tests_user = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, n_test, by = join_by(user))
@@ -340,7 +348,7 @@ rm(n_test)
 n_practice <- duodata |> 
   filter(session == 'practice') |> 
   group_by(user) |>
-  summarize(tot_practice = n_distinct(session_id)) |> 
+  summarize(total_practice_user = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, n_practice, by = join_by(user))
@@ -350,20 +358,106 @@ rm(n_practice)
 n_lesson <- duodata |> 
   filter(session == 'lesson') |> 
   group_by(user) |>
-  summarize(tot_lesson = n_distinct(session_id)) |> 
+  summarize(total_lesson_user = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, n_lesson, by = join_by(user))
 rm(n_lesson)
+
+
+#Number of Sessions by Type by Day per User
+  #Test
+test_day_user <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  filter(session == 'test') |> 
+  group_by(user, days_round) |> 
+  summarize(total_tests_day_user = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup() 
+
+duodata <- left_join(duodata |> mutate(days_round = round(days)), 
+                     test_day_user, 
+                     by = join_by(user, days_round)) |> 
+  mutate(total_tests_day_user = if_else(is.na(total_tests_day_user), 
+                                        0, 
+                                        total_tests_day_user)) |> 
+  dplyr::select(-days_round) 
+
+rm(test_day_user)
+
+  #Practice
+prac_day_user <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  filter(session == 'practice') |> 
+  group_by(user, days_round) |> 
+  summarize(total_prac_day_user = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup() 
+
+left_join(duodata |> mutate(days_round = round(days)), 
+          prac_day_user, 
+          by = join_by(user, days_round)) |> 
+  mutate(total_prac_day_user = if_else(is.na(total_prac_day_user), 
+                                       0, 
+                                       total_prac_day_user)) |> 
+  dplyr::select(-days_round) 
+
+rm(prac_day_user)
+
+  #Lesson
+lesson_day_user <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  filter(session == 'lesson') |> 
+  group_by(user, days_round) |> 
+  summarize(total_lesson_day_user = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup() 
+
+left_join(duodata |> mutate(days_round = round(days)), 
+          lesson_day_user, 
+          by = join_by(user, days_round)) |> 
+  mutate(total_lesson_day_user = if_else(is.na(total_lesson_day_user), 
+                                       0, 
+                                       total_lesson_day_user)) |> 
+  dplyr::select(-days_round) 
+
+rm(lesson_day_user)
+
+
+#Number of Session by Type for ALL Users
+tot_sess_type <- duodata |> 
+  group_by(session) |> 
+  summarize(total_session_type = n_distinct(session_id))
+
+duodata <- left_join(duodata, tot_sess_type, join_by(session))
+  
+rm(tot_sess_type)
+
+
+#Total Number of Session by Type by Day for ALL Users
+tot_sess_t_d <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  group_by(session, days_round) |> 
+  summarize(total_session_type_day = n_distinct(session_id), 
+            .groups = 'keep')
+
+duodata <- left_join(duodata |> mutate(days_round = round(days)), 
+          tot_sess_t_d, 
+          by = join_by(session, days_round)) |> 
+  dplyr::select(-days_round)
+
+rm(tot_sess_t_d)
   
 
 #Get Number of Days Skipped by User
 #THIS WILL ONLY CATCH IT IF THE SESSION GOES OVER A DAY LONG
+#Maybe round days? Need a row that is just user and 1 day for lag strategy to work
+  #Summarize?? 
 duodata |> 
   group_by(user, session_id) |> 
   mutate(day_gap = days - dplyr::lag(days), 
          day_gap = if_else(is.na(day_gap), 0, day_gap)) |>
-  dplyr::select(session_id, days, day_gap)
+  dplyr::select(user, session_id, days, day_gap) 
 
 
 #OTHER
@@ -375,6 +469,8 @@ duodata <- duodata |>
 
 #Removing Variables not included in our final analysis 
 duodata <- duodata |> dplyr::select(-countries)
+
+#Should we remove variables related to tokens-level info? 
 ```
 
 ```{r check-new-distributions}
