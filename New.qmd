@@ -1,0 +1,410 @@
+---
+title: "Project Code V2"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r libraries}
+library(tidyverse)
+library(skimr)
+library(naniar)
+library(gt)
+library(MASS)
+library(caret)
+library(vip)
+library(rpart.plot)
+library(randomForest)
+library(FactoMineR)
+library(factoextra)
+library(corrplot)
+library(mclust)
+library(DescTools)
+library(stats)
+library(dendextend)
+```
+
+```{r}
+duodata <- read_csv("data_flatformat.csv")
+duodata <- duodata |>
+  dplyr::select(-c(
+    "instance_id", 
+    "token", 
+    "part_of_speech",
+    "dependency_label",
+    "dependency_edge_head",
+    "token_index",
+    "client",
+    "prompt"))
+```
+
+```{r variable-creation}
+#AVERAGES
+
+#Averge Accuracy, Session Time, and Days for each User for their entire time 
+duodata <- duodata |> 
+  group_by(user) |> 
+  mutate(avg_accuracy_user = mean(label), 
+         avg_session_time_user = mean(time), 
+         avg_days_user = mean(days)) |> 
+  ungroup()
+  #dplyr::select(user, session_id, exercise_id, contains('avg')) 
+
+#Averge Session Accuracy per User and Session Time per Day 
+
+#Is the day variable aligned for each user? i.e. If I skipped 2 days, is my day 2 the same as a continuous user's day 4? Right now I am assuming yes for all 
+
+duodata <- duodata |> 
+  mutate(days_count = round(days)) |> 
+  group_by(user, days_count) |> 
+  mutate(avg_daily_accuracy_user = mean(label), 
+         avg_daily_session_time_user = mean(time)) |> 
+  ungroup() 
+  #dplyr::select(user, days, session_id, exercise_id, contains('avg')) 
+
+
+#Averge Number of Exercises per Session and Number of Exercises by Session_id 
+duodata <- duodata |> 
+  group_by(session_id) |> 
+  mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
+  ungroup() |> 
+  group_by(user) |>
+  mutate(avg_exercises_per_session = mean(num_exercises_this_session)) |>
+  ungroup() 
+  #dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session) 
+
+
+#Averge Number of Exercises per Day and Number of Exercises by Session_id 
+duodata <- duodata |> 
+  group_by(session_id) |> 
+  mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
+  ungroup() |> 
+  mutate(days_count = round(days)) |> 
+  group_by(user, days_count) |> 
+  mutate(avg_daily_num_exercise = mean(num_exercises_this_session)) 
+  #dplyr::select(user, exercise_id, days_count, num_session_exercises, avg_daily_num_exercise) 
+
+#Averge Number of Sessions per Day and Number of Sessions By Day 
+duodata <- duodata |> 
+  mutate(days_count = round(days)) |> 
+  group_by(user, days_count) |> 
+  mutate(num_sessions_this_day = n_distinct(session_id)) |> 
+  ungroup() |> 
+  group_by(user) |> 
+  mutate(avg_num_sessions = mean(num_sessions_this_day)) 
+  #dplyr::select(user, days_count, session_id, num_sessions_this_day, avg_num_sessions) 
+
+
+#Accuracy by Exercise and Average Accuracy by User 
+duodata <- duodata |> 
+  group_by(exercise_id) |> 
+  mutate(exercise_accuracy = mean(label)) |> 
+  ungroup() |> 
+  group_by(user) |> 
+  mutate(avg_exercise_accuracy = mean(exercise_accuracy)) 
+  #dplyr::select(user, exercise_id, exercise_accuracy, avg_exercise_accuracy) 
+
+
+#TOTALS
+
+
+#Total Number of of Countries by User 
+duodata <- duodata |> 
+  group_by(user) |> 
+  mutate(country_count = str_count(countries, ",") + 1) |> 
+  ungroup() 
+  #dplyr::select(countries, country_count) |> #arrange(desc(country_count)) 
+
+
+#Total Time Spent on App by User
+user_times <- duodata |> 
+  group_by(user, exercise_id) |> 
+  summarize(total_time_exer = sum(time), 
+            .groups = 'keep') |> 
+  ungroup() |> 
+  group_by(user) |> 
+  summarise(total_time = mean(total_time_exer), 
+            .groups = 'keep')
+
+duodata <- left_join(duodata, user_times, by = join_by(user))
+rm(user_times)
+
+
+#Total Number of Exercises per User
+tot_exer <- duodata |> 
+  group_by(user) |> 
+  summarize(total_exercises = n_distinct(exercise_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, tot_exer, by = join_by(user))
+rm(tot_exer)
+
+
+#Total Number of Sessions per User
+tot_sess <-  duodata |> 
+  group_by(user) |> 
+  summarize(total_sessions = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, tot_sess, by = join_by(user))
+rm(tot_sess)
+
+
+#Total Number of Session by Type per User
+  #Test
+n_test <- duodata |> 
+  filter(session == 'test') |> 
+  group_by(user) |>
+  summarize(total_tests_user = n_distinct(session_id)) |>
+  ungroup()
+
+duodata <- left_join(duodata, n_test, by = join_by(user))
+rm(n_test)
+
+duodata <- duodata |>
+  mutate(total_tests_user = ifelse(is.na(total_tests_user), 0, total_tests_user))
+
+  #Practice
+n_practice <- duodata |> 
+  filter(session == 'practice') |> 
+  group_by(user) |>
+  summarize(total_practice_user = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, n_practice, by = join_by(user))
+rm(n_practice)
+
+  #Lesson
+n_lesson <- duodata |> 
+  filter(session == 'lesson') |> 
+  group_by(user) |>
+  summarize(total_lesson_user = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, n_lesson, by = join_by(user))
+rm(n_lesson)
+
+
+#Number of Sessions by Type by Day per User
+  #Test
+test_day_user <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  filter(session == 'test') |> 
+  group_by(user, days_round) |> 
+  summarize(total_tests_day_user = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup() 
+
+duodata <- left_join(duodata |> mutate(days_round = round(days)), 
+                     test_day_user, 
+                     by = join_by(user, days_round)) |> 
+  mutate(total_tests_day_user = if_else(is.na(total_tests_day_user), 
+                                        0, 
+                                        total_tests_day_user)) |> 
+  dplyr::select(-days_round) 
+
+rm(test_day_user)
+
+  #Practice
+prac_day_user <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  filter(session == 'practice') |> 
+  group_by(user, days_round) |> 
+  summarize(total_prac_day_user = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup() 
+
+left_join(duodata |> mutate(days_round = round(days)), 
+          prac_day_user, 
+          by = join_by(user, days_round)) |> 
+  mutate(total_prac_day_user = if_else(is.na(total_prac_day_user), 
+                                       0, 
+                                       total_prac_day_user)) |> 
+  dplyr::select(-days_round) 
+
+rm(prac_day_user)
+
+  #Lesson
+lesson_day_user <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  filter(session == 'lesson') |> 
+  group_by(user, days_round) |> 
+  summarize(total_lesson_day_user = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup() 
+
+left_join(duodata |> mutate(days_round = round(days)), 
+          lesson_day_user, 
+          by = join_by(user, days_round)) |> 
+  mutate(total_lesson_day_user = if_else(is.na(total_lesson_day_user), 
+                                       0, 
+                                       total_lesson_day_user)) |> 
+  dplyr::select(-days_round) 
+
+rm(lesson_day_user)
+
+
+#Number of Session by Type for ALL Users
+tot_sess_type <- duodata |> 
+  group_by(session) |> 
+  summarize(total_session_type = n_distinct(session_id),
+            .groups = 'keep') |> 
+  ungroup()
+
+duodata <- left_join(duodata, tot_sess_type, join_by(session))
+  
+rm(tot_sess_type)
+
+
+#Total Number of Session by Type by Day for ALL Users
+tot_sess_t_d <- duodata |> 
+  mutate(days_round = round(days)) |> 
+  group_by(session, days_round) |> 
+  summarize(total_session_type_day = n_distinct(session_id), 
+            .groups = 'keep') |> 
+  ungroup()
+
+duodata <- left_join(duodata |> mutate(days_round = round(days)), 
+          tot_sess_t_d, 
+          by = join_by(session, days_round)) |> 
+  dplyr::select(-days_round)
+
+rm(tot_sess_t_d)
+
+  
+#OTHER
+
+
+#Get Number of Days Skipped by User
+skipped <- duodata |>
+  mutate(days_round_down = floor(days)) |> 
+  group_by(user, days_round_down) |> 
+  summarise(.groups = 'keep') |>
+  ungroup() |> 
+  mutate(days_skipped_user = days_round_down - dplyr::lag(days_round_down) - 1) |> 
+  ungroup() |> 
+  mutate(days_skipped_user = if_else(is.na(days_skipped_user) | days_skipped_user < 0, 
+                                     0, 
+                                     days_skipped_user))
+
+duodata <- left_join(duodata |> mutate(days_round_down = floor(days)), 
+          skipped, 
+          by = join_by(user, days_round_down)) |> 
+  dplyr::select(-days_round_down) 
+
+rm(skipped)
+
+#Get Last Day User Used App
+duodata <- duodata |> 
+  group_by(user) |> 
+  mutate(drop_day = max(round(days))) |>
+  ungroup()
+
+
+#TIDY UP
+
+
+#Removing Variables not included in our final analysis 
+
+duodata <- duodata |> dplyr::select(-countries)
+
+#Should we remove variables related to tokens-level info? Michael wasn't sure
+#IF WE ARE, CODE BELOW SHOULD DO IT
+# duodata <- duodata |> dplyr::select(-token, 
+#                                     -part_of_speech, 
+#                                     -dependency_label, 
+#                                     -dependency_edge_head,
+#                                     -token_index, 
+#                                     -instance_id)
+
+#Removing Duplicated Rows (each row is still based on the tokens, so there are duplicates)
+#duodata <- distinct(duodata)
+
+#Check New Unit of Analysis
+# n_distinct(duodata$exercise_id)
+# distinct(duodata)
+```
+
+```{r pca}
+duo_pca <- PCA(dplyr::select(duodata, where(is.numeric)))
+```
+
+```{r}
+get_eigenvalue(duo_pca)
+fviz_eig(duo_pca, addlabels = TRUE)
+
+var <- get_pca_var(duo_pca)
+corrplot(var$cor, tl.col = "black", method = "color")
+
+var$cos2
+corrplot(var$cos2, 
+         is.corr = FALSE, 
+         tl.col = "black", 
+         method = "color")
+```
+
+```{r}
+duodata_clust <- duodata |> 
+  dplyr::select(-c(
+    "exercise_id",
+    "exercise_index",
+    "session_id",
+    "session",
+    "format",
+    "label",
+    "user"))
+
+set.seed(1234)
+
+sample <- duodata_clust[sample(nrow(duodata_clust), 1000), ]
+
+duo_diff <- dist(sample, method = "euclidean")
+duo_hc_c <- hclust(duo_diff, method = "complete")
+
+duo_dend <- as.dendrogram(duo_hc_c)|> 
+  color_labels(k = 3)  |> 
+  color_branches(k = 3)
+
+duo_dend |> 
+  set("labels_cex", 0.5) |> 
+  plot(main = "Complete")
+```
+
+```{r agglomerative hierarchical clustering}
+engagement_metrics <- duodata |>
+  dplyr::select(-c(
+    "exercise_id",
+    "exercise_index",
+    "session_id",
+    "session",
+    "format",
+    "label",
+    "user"))
+
+set.seed(1234)
+
+engagement_metrics_scaled <- engagement_metrics |> scale()
+
+sample <- engagement_metrics_scaled[sample(nrow(engagement_metrics_scaled), 1000), ]
+
+scaled_sample <- sample |> scale()
+
+dist_matrix <- dist(scaled_sample, method = "euclidean")
+# Ward's method attempts to create clusters that are more evenly sized. Not sure the tradeoffs here.
+hc <- hclust(dist_matrix, method = "ward.D")
+
+hc_dend <- as.dendrogram(hc)|> 
+  color_labels(k = 5)  |> 
+  color_branches(k = 5)
+
+hc_dend |> 
+  set("labels_cex", 0.5) |> 
+  plot(main = "User Engagement Clusters")
+```
