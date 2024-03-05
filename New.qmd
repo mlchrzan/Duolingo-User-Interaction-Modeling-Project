@@ -400,9 +400,10 @@ dist_matrix <- dist(scaled_sample, method = "euclidean")
 # Ward's method attempts to create clusters that are more evenly sized. Not sure the tradeoffs here.
 hc <- hclust(dist_matrix, method = "ward.D")
 
+# Seems like there may be 2 main clusters...arguably 3?
 hc_dend <- as.dendrogram(hc)|> 
-  color_labels(k = 5)  |> 
-  color_branches(k = 5)
+  color_labels(k = 3)  |> 
+  color_branches(k = 3)
 
 hc_dend |> 
   set("labels_cex", 0.5) |> 
