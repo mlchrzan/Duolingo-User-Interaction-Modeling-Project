@@ -394,7 +394,7 @@ prac_day_user <- duodata |>
             .groups = 'keep') |> 
   ungroup() 
 
-left_join(duodata |> mutate(days_round = round(days)), 
+duodata <- left_join(duodata |> mutate(days_round = round(days)), 
           prac_day_user, 
           by = join_by(user, days_round)) |> 
   mutate(total_prac_day_user = if_else(is.na(total_prac_day_user), 
@@ -413,7 +413,7 @@ lesson_day_user <- duodata |>
             .groups = 'keep') |> 
   ungroup() 
 
-left_join(duodata |> mutate(days_round = round(days)), 
+duodata <- left_join(duodata |> mutate(days_round = round(days)), 
           lesson_day_user, 
           by = join_by(user, days_round)) |> 
   mutate(total_lesson_day_user = if_else(is.na(total_lesson_day_user), 
@@ -785,20 +785,25 @@ accuracy_rf
 ```
 
 ```{r build-boost-rf}
-trControl = trainControl(method = "cv", number = 5)
+# trControl = trainControl(method = "cv", 
+#                          number = 10)
+
+trControl = trainControl(method = "cv",
+                         number = 10, 
+                         classProbs = TRUE, 
+                         summaryFunction = twoClassSummary, 
+                         sampling = 'down')
+
+levels(train$label) <- make.names(levels(train$label))
+
 set.seed(1234)
 m_boost_rf <- train(as.factor(label) ~ . 
-                    - token
-                    - dependency_label 
-                    - dependency_edge_head
                     - exercise_accuracy 
-                    - token_index
-                    - days_count 
-                    - part_of_speech 
                     - user
                      - instance_id 
                      - exercise_id
-                     - session_id, 
+                     - session_id
+                    -token,
                    data = train, 
                    method = "xgbTree", 
                    trControl = trControl, 
