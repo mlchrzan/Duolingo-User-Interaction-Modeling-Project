@@ -560,13 +560,10 @@ duodata <- duodata |>
   group_by(user) |> 
   mutate(last_day_accuracy = mean(label)) |> 
   ungroup()
+```
 
-
-#TIDY UP
-
-
+```{r restructure-data}
 #Removing Variables not included in our final analysis 
-
 duodata <- duodata |> dplyr::select(-countries)
 
 #Should we remove variables related to tokens-level info? Michael wasn't sure
