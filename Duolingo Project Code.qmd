@@ -212,13 +212,10 @@ sum(duodata$label == 1)/sum(duodata$label == 0)
 
 #Substituting extreme values with seemingly reasonable maximums
   
-  #Removing instances with logging issues (time < 1) as noted in the documentation
+  #Removing instances with logging issues (time < 1) as noted in the documentation and time > 3 hours for reasonability
 duodata <- duodata |> 
-  filter(time > 1)
-  #Replacing users who used the app longer than 14 hours with 14 hours as their max
-duodata$time <- Winsorize(duodata$time,
-                          maxval = 50400, 
-                          na.rm = TRUE)
+  filter(time > 0) |> 
+  filter(time < 10800)
 ```
 
 ```{r variable-creation}
@@ -479,6 +476,10 @@ duodata <- duodata |>
   group_by(user) |> 
   mutate(drop_day = max(round(days))) 
 
+#Accuracy on their last day
+
+#Number of Format
+
 
 #TIDY UP
 
@@ -489,19 +490,28 @@ duodata <- duodata |> dplyr::select(-countries)
 
 #Should we remove variables related to tokens-level info? Michael wasn't sure
 #IF WE ARE, CODE BELOW SHOULD DO IT
-# duodata <- duodata |> dplyr::select(-token, 
-#                                     -part_of_speech, 
-#                                     -dependency_label, 
-#                                     -dependency_edge_head,
-#                                     -token_index, 
-#                                     -instance_id)
+duodata <- duodata |> dplyr::select(-token,
+                                    -part_of_speech,
+                                    -dependency_label,
+                                    -dependency_edge_head,
+                                    -token_index,
+                                    -instance_id,
+                                    -exercise_id, 
+                                    -days, 
+                                    -exercise_index, 
+                                    -client, 
+                                    -session, 
+                                    -format, 
+                                    -time, 
+                                    -session_id,
+                                    -label)
 
 #Removing Duplicated Rows (each row is still based on the tokens, so there are duplicates)
-#duodata <- distinct(duodata)
+duodata <- distinct(duodata)
 
 #Check New Unit of Analysis
-# n_distinct(duodata$exercise_id)
-# distinct(duodata)
+n_distinct(duodata$exercise_id)
+distinct(duodata)
 ```
 
 ```{r check-new-distributions}
