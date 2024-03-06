@@ -95,24 +95,13 @@ duodata |>
   arrange(desc(pct_miss))
 ```
 
-```{r handle-missing}
+```{r examine-session-format-distribution}
 
-#JUST GOING TO REMOVE PROMPT
-# duodata |> 
-#   group_by(exercise_id) |> 
-#   mutate(exercise_accuracy = mean(label)) |> ungroup() |> 
-#   filter(format == 'listen') |>
-#   filter(exercise_accuracy == 1) |>
-#   mutate(prompt = if_else(is.na(prompt), 'identifiable', prompt)) |> 
-#   dplyr::select(-instance_id,
-#                 -part_of_speech,
-#                 -contains('dependency'), -countries) 
+duodata |> 
+  group_by(session, format) |> 
+  summarize(n = n())
 
-#If we can get the exact prompt, we can match it to users who got it wrong
-
-#Could we also just remove prompt? Prompt missing data is entirely on the listen format and probably wouldn't help with predictions. 
-
-#Time missing data seems to mostly be a problem on iOS but Michael can't see a pattern beyond that. 
+#NOTE: NOT evenly distributed formats within session types. Reverse translate by far the most common
 ```
 
 # Data Cleaning
@@ -224,65 +213,207 @@ duodata <- duodata |>
 #Averge Accuracy, Session Time, and Days for each User for their entire time 
 duodata <- duodata |> 
   group_by(user) |> 
-  mutate(avg_accuracy_user = mean(label), 
-         avg_session_time_user = mean(time), 
-         avg_days_user = mean(days)) |> 
+  mutate(avg_total_accuracy = mean(label), 
+         avg_session_time = mean(time), 
+         avg_days = mean(days)) |> 
   ungroup()
   #dplyr::select(user, session_id, exercise_id, contains('avg')) 
 
-#Averge Session Accuracy per User and Session Time per Day 
 
-#Is the day variable aligned for each user? i.e. If I skipped 2 days, is my day 2 the same as a continuous user's day 4? Right now I am assuming yes for all 
-
-duodata <- duodata |> 
-  mutate(days_count = round(days)) |> 
-  group_by(user, days_count) |> 
-  mutate(avg_daily_accuracy_user = mean(label), 
-         avg_daily_session_time_user = mean(time)) |> 
-  ungroup() 
-  #dplyr::select(user, days, session_id, exercise_id, contains('avg')) 
-
-
-#Averge Number of Exercises per Session and Number of Exercises by Session_id 
+#Averge Number of Exercises per Session (get and remove Number of Exercises by Session_id)
 duodata <- duodata |> 
   group_by(session_id) |> 
   mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
   ungroup() |> 
   group_by(user) |>
   mutate(avg_exercises_per_session = mean(num_exercises_this_session)) |>
-  ungroup() 
+  ungroup() |> 
+  dplyr::select(-num_exercises_this_session)
   #dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session) 
 
 
-#Averge Number of Exercises per Day and Number of Exercises by Session_id 
+#Averge Number of Sessions per Day (get and remove Number of Sessions By Day) 
 duodata <- duodata |> 
-  group_by(session_id) |> 
-  mutate(num_exercises_this_session = n_distinct(exercise_index)) |> 
-  ungroup() |> 
-  mutate(days_count = round(days)) |> 
+  mutate(days_count = floor(days)) |> 
   group_by(user, days_count) |> 
-  mutate(avg_daily_num_exercise = mean(num_exercises_this_session)) 
-  #dplyr::select(user, exercise_id, days_count, num_session_exercises, avg_daily_num_exercise) 
-
-#Averge Number of Sessions per Day and Number of Sessions By Day 
-duodata <- duodata |> 
-  mutate(days_count = round(days)) |> 
-  group_by(user, days_count) |> 
-  mutate(num_sessions_this_day = n_distinct(session_id)) |> 
+  mutate(num_sessions_user_in_day = n_distinct(session_id)) |> 
   ungroup() |> 
   group_by(user) |> 
-  mutate(avg_num_sessions = mean(num_sessions_this_day)) 
+  mutate(avg_num_sessions_in_day = mean(num_sessions_user_in_day)) |> 
+  dplyr::select(-days_count, -num_sessions_user_in_day)
   #dplyr::select(user, days_count, session_id, num_sessions_this_day, avg_num_sessions) 
 
 
-#Accuracy by Exercise and Average Accuracy by User 
-duodata <- duodata |> 
-  group_by(exercise_id) |> 
-  mutate(exercise_accuracy = mean(label)) |> 
+#Average Exercise Accuracy by User 
+user_ex_acc <- duodata |> 
+  group_by(user, exercise_id) |> 
+  summarize(avg_accuracy_by_exercise = mean(label), 
+            .groups = 'keep') |>
   ungroup() |> 
+  dplyr::select(-exercise_id) |>
   group_by(user) |> 
-  mutate(avg_exercise_accuracy = mean(exercise_accuracy)) 
-  #dplyr::select(user, exercise_id, exercise_accuracy, avg_exercise_accuracy) 
+  summarize(avg_exercise_accuracy = mean(avg_accuracy_by_exercise), 
+            .groups = 'keep') |> 
+  ungroup()
+
+duodata <- left_join(duodata, user_ex_acc, 
+                     by = join_by(user))
+
+rm(user_ex_acc)
+
+
+#Average Overall Session Accuracy
+user_sess_acc <- duodata |> 
+  group_by(user, session_id) |> 
+  summarize(avg_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_session_accuracy = mean(avg_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+duodata <- left_join(duodata, user_sess_acc, 
+                     by = join_by(user))
+
+rm(user_sess_acc)
+
+  
+#Average Session Accuracy by Type
+  #Average Test Accuracy
+user_test_acc <- duodata |> 
+  filter(session == 'test') |> 
+  group_by(user, session_id) |> 
+  summarize(avg_test_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_test_accuracy = mean(avg_test_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+#duodata <- 
+left_join(duodata, user_test_acc, 
+          by = join_by(user)) |> 
+  mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy, 
+                                           0, 
+                                           average_test_accuracy)))
+
+rm(user_test_acc)
+
+  #Average Lesson Accuracy
+user_lesson_acc <- duodata |> 
+  filter(session == 'lesson') |> 
+  group_by(user, session_id) |> 
+  summarize(avg_lesson_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_lesson_accuracy = mean(avg_lesson_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+#duodata <- 
+left_join(duodata, user_lesson_acc, 
+          by = join_by(user)) |> 
+  mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy, 
+                                             0, 
+                                             avg_lesson_accuracy)))
+
+rm(user_lesson_acc)
+
+  #Average Practice Accuracy
+#user_practice_acc <- 
+duodata |> 
+  filter(session == 'practice') |> 
+  group_by(user, session_id) |> 
+  summarize(avg_practice_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_practice_accuracy = mean(avg_practice_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+#duodata <- 
+left_join(duodata, user_practice_acc, 
+          by = join_by(user)) |> 
+  mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy, 
+                                               0, 
+                                               avg_practice_accuracy)))
+
+rm(user_lesson_acc)
+
+#Average Accuracy per User by Format
+  #Reverse_Translate
+user_rever_t_acc <- duodata |> 
+  filter(format == 'reverse_translate') |> 
+  group_by(user, session_id) |> 
+  summarize(avg_rever_t_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_reverse_trans_accuracy = mean(avg_rever_t_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+#duodata <- 
+left_join(duodata, user_rever_t_acc, 
+          by = join_by(user)) 
+
+rm(user_rever_t_acc)
+
+  #Reverse_Tap
+#user_rever_tap_acc <- 
+duodata |> 
+  filter(format == 'reverse_tap') |> 
+  group_by(user, session_id) |> 
+  summarize(avg_rever_tap_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_reverse_tap_accuracy = mean(avg_rever_tap_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+#duodata <- 
+left_join(duodata, user_rever_tap_acc, 
+          by = join_by(user)) |> 
+  mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy, 
+                                                    0, 
+                                                    avg_reverse_tap_accuracy)))
+
+rm(user_rever_tap_acc)
+
+  #Listen
+#user_listen_acc <- 
+duodata |> 
+  filter(format == 'listen') |> 
+  group_by(user, session_id) |> 
+  summarize(avg_listen_accuracy_by_session = mean(label), 
+            .groups = 'keep') |>
+  ungroup() |> 
+  dplyr::select(-session_id) |>
+  group_by(user) |> 
+  summarize(avg_listen_accuracy = mean(avg_listen_accuracy_by_session), 
+            .groups = 'keep') |> 
+  ungroup()
+
+#duodata <- 
+left_join(duodata, user_listen_acc, 
+          by = join_by(user)) |> 
+  mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy, 
+                                       0, 
+                                       avg_listen_accuracy)))
+
+rm(user_listen_acc)
+  
 
 
 #TOTALS
@@ -335,7 +466,7 @@ rm(tot_sess)
 n_test <- duodata |> 
   filter(session == 'test') |> 
   group_by(user) |>
-  summarize(total_tests_user = n_distinct(session_id)) |> 
+  summarize(total_test_sessions = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, n_test, by = join_by(user))
@@ -345,7 +476,7 @@ rm(n_test)
 n_practice <- duodata |> 
   filter(session == 'practice') |> 
   group_by(user) |>
-  summarize(total_practice_user = n_distinct(session_id)) |> 
+  summarize(total_practice_sessions = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, n_practice, by = join_by(user))
@@ -355,98 +486,44 @@ rm(n_practice)
 n_lesson <- duodata |> 
   filter(session == 'lesson') |> 
   group_by(user) |>
-  summarize(total_lesson_user = n_distinct(session_id)) |> 
+  summarize(total_lesson_sessions = n_distinct(session_id)) |> 
   ungroup()
 
 duodata <- left_join(duodata, n_lesson, by = join_by(user))
 rm(n_lesson)
 
 
-#Number of Sessions by Type by Day per User
-  #Test
-test_day_user <- duodata |> 
-  mutate(days_round = round(days)) |> 
-  filter(session == 'test') |> 
-  group_by(user, days_round) |> 
-  summarize(total_tests_day_user = n_distinct(session_id), 
-            .groups = 'keep') |> 
-  ungroup() 
-
-duodata <- left_join(duodata |> mutate(days_round = round(days)), 
-                     test_day_user, 
-                     by = join_by(user, days_round)) |> 
-  mutate(total_tests_day_user = if_else(is.na(total_tests_day_user), 
-                                        0, 
-                                        total_tests_day_user)) |> 
-  dplyr::select(-days_round) 
-
-rm(test_day_user)
-
-  #Practice
-prac_day_user <- duodata |> 
-  mutate(days_round = round(days)) |> 
-  filter(session == 'practice') |> 
-  group_by(user, days_round) |> 
-  summarize(total_prac_day_user = n_distinct(session_id), 
-            .groups = 'keep') |> 
-  ungroup() 
-
-duodata <- left_join(duodata |> mutate(days_round = round(days)), 
-          prac_day_user, 
-          by = join_by(user, days_round)) |> 
-  mutate(total_prac_day_user = if_else(is.na(total_prac_day_user), 
-                                       0, 
-                                       total_prac_day_user)) |> 
-  dplyr::select(-days_round) 
-
-rm(prac_day_user)
-
-  #Lesson
-lesson_day_user <- duodata |> 
-  mutate(days_round = round(days)) |> 
-  filter(session == 'lesson') |> 
-  group_by(user, days_round) |> 
-  summarize(total_lesson_day_user = n_distinct(session_id), 
-            .groups = 'keep') |> 
-  ungroup() 
-
-duodata <- left_join(duodata |> mutate(days_round = round(days)), 
-          lesson_day_user, 
-          by = join_by(user, days_round)) |> 
-  mutate(total_lesson_day_user = if_else(is.na(total_lesson_day_user), 
-                                       0, 
-                                       total_lesson_day_user)) |> 
-  dplyr::select(-days_round) 
-
-rm(lesson_day_user)
-
-
-#Number of Session by Type for ALL Users
-tot_sess_type <- duodata |> 
-  group_by(session) |> 
-  summarize(total_session_type = n_distinct(session_id),
-            .groups = 'keep') |> 
+#Total Number of Each Format per User
+  #Reverse Translate
+n_rever_t <- duodata |> 
+  filter(format == 'reverse_translate') |> 
+  group_by(user) |>
+  summarize(total_reverse_translate = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata, tot_sess_type, join_by(session))
-  
-rm(tot_sess_type)
+duodata <- left_join(duodata, n_rever_t, by = join_by(user))
+rm(n_rever_t)
 
-
-#Total Number of Session by Type by Day for ALL Users
-tot_sess_t_d <- duodata |> 
-  mutate(days_round = round(days)) |> 
-  group_by(session, days_round) |> 
-  summarize(total_session_type_day = n_distinct(session_id), 
-            .groups = 'keep') |> 
+  #Reverse_tap
+n_rever_tap <- duodata |> 
+  filter(format == 'reverse_tap') |> 
+  group_by(user) |>
+  summarize(total_reverse_tap = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata |> mutate(days_round = round(days)), 
-          tot_sess_t_d, 
-          by = join_by(session, days_round)) |> 
-  dplyr::select(-days_round)
+duodata <- left_join(duodata, n_rever_tap, by = join_by(user))
+rm(n_rever_tap)
 
-rm(tot_sess_t_d)
+  #Listen
+n_listen <- duodata |> 
+  filter(format == 'listen') |> 
+  group_by(user) |>
+  summarize(total_listen = n_distinct(session_id)) |> 
+  ungroup()
+
+duodata <- left_join(duodata, n_rever_tap, by = join_by(user))
+rm(n_rever_tap)
+
 
   
 #OTHER
@@ -474,11 +551,15 @@ rm(skipped)
 #Get Last Day User Used App
 duodata <- duodata |> 
   group_by(user) |> 
-  mutate(drop_day = max(round(days))) 
+  mutate(drop_day = max(floor(days))) |> 
+  ungroup()
 
 #Accuracy on their last day
-
-#Number of Format
+duodata <- duodata |> 
+  filter(floor(days) == drop_day) |>
+  group_by(user) |> 
+  mutate(last_day_accuracy = mean(label)) |> 
+  ungroup()
 
 
 #TIDY UP
@@ -506,12 +587,12 @@ duodata <- duodata |> dplyr::select(-token,
                                     -session_id,
                                     -label)
 
+
+#Check New Unit of Analysis (should be 2585 rows)
+distinct(duodata)
+
 #Removing Duplicated Rows (each row is still based on the tokens, so there are duplicates)
 duodata <- distinct(duodata)
-
-#Check New Unit of Analysis
-n_distinct(duodata$exercise_id)
-distinct(duodata)
 ```
 
 ```{r check-new-distributions}
