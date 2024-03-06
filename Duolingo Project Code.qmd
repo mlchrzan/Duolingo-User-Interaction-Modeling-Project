@@ -50,7 +50,7 @@ duoskim <- skim(duodata)
 duoskim
 ```
 
-## Missing Data
+## Original Missing Data
 
 ```{r viz-missing}
 #Setting sample since these packaged functions throw errors for large data
@@ -192,16 +192,7 @@ sum(duodata$label == 1)/sum(duodata$label == 0)
 ```
 
 ```{r clean-data}
-#NOT SURE REPLACEMENT MAKES SENSE HERE OR REMOVAL, DO WE JUST LEAVE IT?? 
-#Dependency edge heads
-# duodata$dependency_edge_head <- Winsorize(duodata$dependency_edge_head, 
-#                                           minval = 0,
-#                                           maxval = 7, 
-#                                           na.rm = TRUE)
-
-#Substituting extreme values with seemingly reasonable maximums
-  
-  #Removing instances with logging issues (time < 1) as noted in the documentation and time > 3 hours for reasonability
+#Removing instances with logging issues (time < 1) as noted in the documentation and time > 3 hours for reasonability
 duodata <- duodata |> 
   filter(time > 0) |> 
   filter(time < 10800)
@@ -284,133 +275,102 @@ rm(user_sess_acc)
   #Average Test Accuracy
 user_test_acc <- duodata |> 
   filter(session == 'test') |> 
-  group_by(user, session_id) |> 
-  summarize(avg_test_accuracy_by_session = mean(label), 
-            .groups = 'keep') |>
-  ungroup() |> 
-  dplyr::select(-session_id) |>
   group_by(user) |> 
-  summarize(avg_test_accuracy = mean(avg_test_accuracy_by_session), 
+  summarize(avg_test_accuracy = mean(label), 
             .groups = 'keep') |> 
   ungroup()
 
-#duodata <- 
-left_join(duodata, user_test_acc, 
-          by = join_by(user)) |> 
-  mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy, 
-                                           0, 
-                                           average_test_accuracy)))
+duodata <- left_join(duodata, user_test_acc, 
+          by = join_by(user)) 
+
+# |> 
+#   mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy, 
+#                                            0, 
+#                                            avg_test_accuracy)))
 
 rm(user_test_acc)
 
   #Average Lesson Accuracy
 user_lesson_acc <- duodata |> 
   filter(session == 'lesson') |> 
-  group_by(user, session_id) |> 
-  summarize(avg_lesson_accuracy_by_session = mean(label), 
-            .groups = 'keep') |>
-  ungroup() |> 
-  dplyr::select(-session_id) |>
   group_by(user) |> 
-  summarize(avg_lesson_accuracy = mean(avg_lesson_accuracy_by_session), 
+  summarize(avg_lesson_accuracy = mean(label), 
             .groups = 'keep') |> 
   ungroup()
 
-#duodata <- 
-left_join(duodata, user_lesson_acc, 
-          by = join_by(user)) |> 
-  mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy, 
-                                             0, 
-                                             avg_lesson_accuracy)))
+duodata <- left_join(duodata, user_lesson_acc, 
+          by = join_by(user)) 
+
+# |> 
+#   mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy, 
+#                                              0, 
+#                                              avg_lesson_accuracy)))
 
 rm(user_lesson_acc)
 
   #Average Practice Accuracy
-#user_practice_acc <- 
-duodata |> 
+user_practice_acc <- duodata |> 
   filter(session == 'practice') |> 
-  group_by(user, session_id) |> 
-  summarize(avg_practice_accuracy_by_session = mean(label), 
-            .groups = 'keep') |>
-  ungroup() |> 
-  dplyr::select(-session_id) |>
   group_by(user) |> 
-  summarize(avg_practice_accuracy = mean(avg_practice_accuracy_by_session), 
+  summarize(avg_practice_accuracy = mean(label), 
             .groups = 'keep') |> 
   ungroup()
 
-#duodata <- 
-left_join(duodata, user_practice_acc, 
-          by = join_by(user)) |> 
-  mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy, 
-                                               0, 
-                                               avg_practice_accuracy)))
+duodata <- left_join(duodata, user_practice_acc, 
+          by = join_by(user)) 
 
-rm(user_lesson_acc)
+# |> 
+#   mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy, 
+#                                                0, 
+#                                                avg_practice_accuracy)))
+
+rm(user_practice_acc)
 
 #Average Accuracy per User by Format
   #Reverse_Translate
 user_rever_t_acc <- duodata |> 
   filter(format == 'reverse_translate') |> 
-  group_by(user, session_id) |> 
-  summarize(avg_rever_t_accuracy_by_session = mean(label), 
-            .groups = 'keep') |>
-  ungroup() |> 
-  dplyr::select(-session_id) |>
   group_by(user) |> 
-  summarize(avg_reverse_trans_accuracy = mean(avg_rever_t_accuracy_by_session), 
+  summarize(avg_reverse_trans_accuracy = mean(label), 
             .groups = 'keep') |> 
   ungroup()
-
-#duodata <- 
-left_join(duodata, user_rever_t_acc, 
+  
+duodata <- left_join(duodata, user_rever_t_acc, 
           by = join_by(user)) 
 
 rm(user_rever_t_acc)
 
   #Reverse_Tap
-#user_rever_tap_acc <- 
-duodata |> 
+user_rever_tap_acc <- duodata |> 
   filter(format == 'reverse_tap') |> 
-  group_by(user, session_id) |> 
-  summarize(avg_rever_tap_accuracy_by_session = mean(label), 
-            .groups = 'keep') |>
-  ungroup() |> 
-  dplyr::select(-session_id) |>
   group_by(user) |> 
-  summarize(avg_reverse_tap_accuracy = mean(avg_rever_tap_accuracy_by_session), 
+  summarize(avg_reverse_tap_accuracy = mean(label), 
             .groups = 'keep') |> 
   ungroup()
 
-#duodata <- 
-left_join(duodata, user_rever_tap_acc, 
-          by = join_by(user)) |> 
-  mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy, 
-                                                    0, 
-                                                    avg_reverse_tap_accuracy)))
+duodata <- left_join(duodata, user_rever_tap_acc, 
+          by = join_by(user)) 
+# |> 
+#   mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy, 
+#                                                     0, 
+#                                                     avg_reverse_tap_accuracy)))
 
 rm(user_rever_tap_acc)
 
   #Listen
-#user_listen_acc <- 
-duodata |> 
+user_listen_acc <- duodata |> 
   filter(format == 'listen') |> 
-  group_by(user, session_id) |> 
-  summarize(avg_listen_accuracy_by_session = mean(label), 
-            .groups = 'keep') |>
-  ungroup() |> 
-  dplyr::select(-session_id) |>
   group_by(user) |> 
-  summarize(avg_listen_accuracy = mean(avg_listen_accuracy_by_session), 
+  summarize(avg_listen_accuracy = mean(label), 
             .groups = 'keep') |> 
   ungroup()
-
-#duodata <- 
-left_join(duodata, user_listen_acc, 
-          by = join_by(user)) |> 
-  mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy, 
-                                       0, 
-                                       avg_listen_accuracy)))
+  
+duodata <- left_join(duodata, user_listen_acc, 
+                     by = join_by(user)) 
+# |> 
+#   mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy, 
+#                                        0, 
+#                                        avg_listen_accuracy)))
 
 rm(user_listen_acc)
   
@@ -521,8 +481,8 @@ n_listen <- duodata |>
   summarize(total_listen = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata, n_rever_tap, by = join_by(user))
-rm(n_rever_tap)
+duodata <- left_join(duodata, n_listen, by = join_by(user))
+rm(n_listen)
 
 
   
@@ -590,6 +550,15 @@ distinct(duodata)
 
 #Removing Duplicated Rows (each row is still based on the tokens, so there are duplicates)
 duodata <- distinct(duodata)
+
+#Find duplicated columns
+duplicated_columns <- duplicated(as.list(duodata))
+
+#Show the names of duplicated columns
+colnames(duodata[duplicated_columns])
+
+#Remove the duplicated columns
+duodata <- duodata[, !duplicated_columns]
 ```
 
 ```{r check-new-distributions}
@@ -602,13 +571,23 @@ duodata |>
   facet_wrap(. ~ variable, scales = "free") 
 ```
 
+# Examine Introduced Missing Data
+
+```{r new-missing}
+#NOTE: No longer sampling due to reduced size of dataset from aggregation
+vis_miss(duodata, 
+         show_perc = TRUE) 
+miss_var_summary(duodata)
+
+gg_miss_var(duodata)
+gg_miss_upset(duodata)
+```
+
 # Examine Data
 
 ```{r}
 duodata |> 
-  group_by(user) |> 
-  summarize(last_day = max(days)) |> 
-  ggplot(aes(x = last_day)) + 
+  ggplot(aes(x = drop_day)) + 
   geom_histogram(fill = "#7ac70c") + 
   labs(title = 'User Retention Over Time',
        subtitle = 'Number of Users Returning to Duolingo Each Day Decreases Over Time', 
@@ -617,123 +596,25 @@ duodata |>
   theme_minimal()
 
 duodata |> 
-  ggplot(aes(x = days)) + 
+  ggplot(aes(x = avg_days)) + 
   geom_histogram(fill = "#7ac70c") + 
-  labs(title = 'User Engagement Over Time',
-       subtitle = 'Number of Words Translated on Duolingo Each Day Steadily Decreases', 
+  labs(title = 'Users Average Number of Days',
+       subtitle = 'As time progresses, less and less users return to the app', 
        x = 'Days', 
-       y = 'Number of Activities') +
+       y = 'Number of Users') +
   scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
   theme_minimal() 
-```
 
-```{r viz for seminar}
-#Create a viz of x = time, y = accuracy measured by proportion of label that is 1
-#Could also show if accuracy changes based on session
-
-#SOMETHING VERY STRANGE HAPPENING HERE w/ iOS-------
-duosample |> 
-  group_by(user, session_id) |> 
-  mutate(user_session_accuracy = mean(label)) |> 
-  ungroup() |> 
-  ggplot(aes(x = days, 
-             y = user_session_accuracy, 
-             color = session)) + 
-  geom_smooth() + 
-  facet_grid(~client) +
-  labs(title = 'User Session Accuracy Over Time', 
-       subtitle = '',
-       x = 'Session Type', 
-       y = 'Session Accuracy') + 
+duodata |> 
+  #filter(days_skipped_user > 0) |> 
+  ggplot(aes(x = days_skipped_user)) + 
+  geom_histogram(fill = "#7ac70c") + 
+  labs(title = 'Number of Days Users Skipped',
+       subtitle = 'Most users never skip a day', 
+       x = 'Number of Days Skipped', 
+       y = 'Number of Users') +
+  scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
   theme_minimal() 
-#--------------------------------------------------
-
-duodata |> 
-  group_by(session) |> 
-  summarise(session_accuracy = mean(label)) |> 
-  ungroup() |> 
-  ggplot(aes(x = session, 
-             y = session_accuracy, 
-             fill = session)) + 
-  geom_col() +
-  scale_fill_manual(values = c('#7ac70c', '#7ac70c', '#7ac70c')) +
-  labs(title = 'Practice Makes Perfect?', 
-       subtitle = 'Average Session Accuracy based on Session Type',
-       x = 'Session Type', 
-       y = 'Session Accuracy') + 
-  theme_minimal() +
-  theme(legend.position = 'none') +
-  coord_flip()
-
-duodata |> 
-  group_by(session_id) |> 
-  mutate(session_accuracy = mean(label)) |> 
-  ungroup() |> 
-  ggplot(aes(x = days, 
-             y = session_accuracy, 
-             color = session)) + 
-  geom_smooth() + 
-  labs(title = 'It All Adds Up', 
-       subtitle = 'Session Accuracy Over Time',
-       x = 'Days Since Starting Duolingo', 
-       y = 'Session Accuracy', 
-       color = 'Session Type') + 
-  theme_minimal() + 
-  theme(legend.position = 'bottom')
-
-duodata |> 
-  group_by(session_id) |> 
-  mutate(session_accuracy = mean(label)) |> 
-  ungroup() |> 
-  ggplot(aes(x = days, 
-             y = session_accuracy)) + 
-  geom_smooth() + 
-  labs(title = 'It All Adds Up', 
-       subtitle = 'Session Accuracy Over Time',
-       x = 'Days Since Starting Duolingo', 
-       y = 'Session Accuracy', 
-       color = 'Session Type') + 
-  theme_minimal() + 
-  theme(legend.position = 'bottom')
-
-
-#Test Outs------------------------------------------------------
-duosample |> 
-  group_by(user) |> 
-  mutate(user_accuracy = sum(label == 1)/sum(!is.na(label))) |> 
-  ungroup() |> 
-  ggplot(aes(x = user_accuracy)) +
-  geom_histogram() + 
-  labs(title = 'Distribution of User Accuracy')
-
-
-duosample |> 
-  group_by(user, exercise_id) |> 
-  mutate(user_exer_accuracy = mean(label)) |> 
-  ungroup() |> 
-  ggplot(aes(x = days, 
-             y = user_exer_accuracy)) +
-  geom_smooth() + 
-  labs(title = 'User Exercise Accuracy Over Time')
-
-duosample |> 
-  group_by(session_id) |> 
-  mutate(avg_session_accuracy = mean(label), 
-         avg_session_time = mean(time)) |> 
-  ungroup() |> 
-  ggplot(aes(x = avg_session_time, 
-             y = avg_session_accuracy, 
-             color = session)) + 
-  geom_smooth() + 
-  labs(title = 'Session Accuracy vs Session Length', 
-       subtitle = '',
-       x = 'Average Time for the Session', 
-       y = 'Average Session Accuracy', 
-       color = 'Session Type') + 
-  theme_minimal() +
-  theme(legend.position = 'bottom')
-
-#What parts of speech do people most get wrong??
 ```
 
 ```{r pca}
@@ -757,10 +638,7 @@ corrplot(var$cos2,
 # Create Clusters
 
 ```{r hierarchical}
-duodata_clust <- duodata |> 
-  dplyr::select(-part_of_speech, -dependency_label, -dependency_edge_head, -exercise_index, -token_index, -token, - label)
-
-duo_diff <- dist(duodata_clust, method = "euclidean")
+duo_diff <- dist(duodata, method = "euclidean")
 duo_hc_c <- hclust(duo_diff, method = "complete")
 
 duo_dend <- as.dendrogram(duo_hc_c)|> 
