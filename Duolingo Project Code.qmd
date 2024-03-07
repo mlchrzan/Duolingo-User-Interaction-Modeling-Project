@@ -34,6 +34,10 @@ library(factoextra)
 library(corrplot)
 library(mclust)
 library(DescTools)
+library(stats)
+library(dendextend)
+library(ggrepel)
+library(rgl)
 ```
 
 ## Import Data
@@ -281,12 +285,10 @@ user_test_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_test_acc, 
-          by = join_by(user)) 
-
-# |> 
-#   mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy, 
-#                                            0, 
-#                                            avg_test_accuracy)))
+                     by = join_by(user)) |>
+  mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy),
+                                           avg_session_accuracy,
+                                           avg_test_accuracy))
 
 rm(user_test_acc)
 
@@ -299,12 +301,10 @@ user_lesson_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_lesson_acc, 
-          by = join_by(user)) 
-
-# |> 
-#   mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy, 
-#                                              0, 
-#                                              avg_lesson_accuracy)))
+          by = join_by(user)) |>
+  mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy),
+                                             avg_session_accuracy,
+                                             avg_lesson_accuracy))
 
 rm(user_lesson_acc)
 
@@ -317,12 +317,10 @@ user_practice_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_practice_acc, 
-          by = join_by(user)) 
-
-# |> 
-#   mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy, 
-#                                                0, 
-#                                                avg_practice_accuracy)))
+          by = join_by(user)) |>
+  mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy),
+                                               avg_session_accuracy,
+                                               avg_practice_accuracy))
 
 rm(user_practice_acc)
 
@@ -336,7 +334,10 @@ user_rever_t_acc <- duodata |>
   ungroup()
   
 duodata <- left_join(duodata, user_rever_t_acc, 
-          by = join_by(user)) 
+          by = join_by(user)) |>
+  mutate(avg_reverse_trans_accuracy = if_else(is.na(avg_reverse_trans_accuracy),
+                                                    avg_session_accuracy,
+                                                    avg_reverse_trans_accuracy))
 
 rm(user_rever_t_acc)
 
@@ -349,11 +350,10 @@ user_rever_tap_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_rever_tap_acc, 
-          by = join_by(user)) 
-# |> 
-#   mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy, 
-#                                                     0, 
-#                                                     avg_reverse_tap_accuracy)))
+                     by = join_by(user)) |>
+  mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy),
+                                                  avg_session_accuracy,
+                                                  avg_reverse_tap_accuracy))
 
 rm(user_rever_tap_acc)
 
@@ -366,11 +366,10 @@ user_listen_acc <- duodata |>
   ungroup()
   
 duodata <- left_join(duodata, user_listen_acc, 
-                     by = join_by(user)) 
-# |> 
-#   mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy, 
-#                                        0, 
-#                                        avg_listen_accuracy)))
+                     by = join_by(user)) |>
+  mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy),
+                                       avg_session_accuracy,
+                                       avg_listen_accuracy))
 
 rm(user_listen_acc)
   
@@ -427,9 +426,11 @@ n_test <- duodata |>
   filter(session == 'test') |> 
   group_by(user) |>
   summarize(total_test_sessions = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_test, by = join_by(user))
+duodata <- left_join(duodata, n_test, by = join_by(user)) |> 
+  mutate(total_test_sessions = if_else(is.na(total_test_sessions), 0, total_test_sessions))
+
 rm(n_test)
 
   #Practice
@@ -437,9 +438,11 @@ n_practice <- duodata |>
   filter(session == 'practice') |> 
   group_by(user) |>
   summarize(total_practice_sessions = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_practice, by = join_by(user))
+duodata <- left_join(duodata, n_practice, by = join_by(user)) |> 
+  mutate(total_practice_sessions = if_else(is.na(total_practice_sessions), 0, total_practice_sessions))
+
 rm(n_practice)
 
   #Lesson
@@ -447,9 +450,11 @@ n_lesson <- duodata |>
   filter(session == 'lesson') |> 
   group_by(user) |>
   summarize(total_lesson_sessions = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_lesson, by = join_by(user))
+duodata <- left_join(duodata, n_lesson, by = join_by(user)) |> 
+  mutate(total_lesson_sessions = if_else(is.na(total_lesson_sessions), 0, total_lesson_sessions))
+
 rm(n_lesson)
 
 
@@ -461,7 +466,9 @@ n_rever_t <- duodata |>
   summarize(total_reverse_translate = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata, n_rever_t, by = join_by(user))
+duodata <- left_join(duodata, n_rever_t, by = join_by(user))  |> 
+  mutate(total_reverse_translate = if_else(is.na(total_reverse_translate), 0, total_reverse_translate))
+
 rm(n_rever_t)
 
   #Reverse_tap
@@ -471,7 +478,9 @@ n_rever_tap <- duodata |>
   summarize(total_reverse_tap = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata, n_rever_tap, by = join_by(user))
+duodata <- left_join(duodata, n_rever_tap, by = join_by(user)) |> 
+  mutate(total_reverse_tap = if_else(is.na(total_reverse_tap), 0, total_reverse_tap))
+
 rm(n_rever_tap)
 
   #Listen
@@ -479,9 +488,11 @@ n_listen <- duodata |>
   filter(format == 'listen') |> 
   group_by(user) |>
   summarize(total_listen = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_listen, by = join_by(user))
+duodata <- left_join(duodata, n_listen, by = join_by(user)) |> 
+  mutate(total_listen = if_else(is.na(total_listen), 0, total_listen))
+
 rm(n_listen)
 
 
@@ -524,11 +535,8 @@ duodata <- duodata |>
 
 ```{r restructure-data}
 #Removing Variables not included in our final analysis 
-duodata <- duodata |> dplyr::select(-countries)
-
-#Should we remove variables related to tokens-level info? Michael wasn't sure
-#IF WE ARE, CODE BELOW SHOULD DO IT
-duodata <- duodata |> dplyr::select(-token,
+duodata <- duodata |> dplyr::select(-countries, 
+                                    -token,
                                     -part_of_speech,
                                     -dependency_label,
                                     -dependency_edge_head,
@@ -555,7 +563,7 @@ duodata <- distinct(duodata)
 duplicated_columns <- duplicated(as.list(duodata))
 
 #Show the names of duplicated columns
-colnames(duodata[duplicated_columns])
+#colnames(duodata[duplicated_columns])
 
 #Remove the duplicated columns
 duodata <- duodata[, !duplicated_columns]
@@ -578,14 +586,12 @@ duodata |>
 vis_miss(duodata, 
          show_perc = TRUE) 
 miss_var_summary(duodata)
-
-gg_miss_var(duodata)
-gg_miss_upset(duodata)
+#No Missing Data! 
 ```
 
-# Examine Data
+# Explore Data
 
-```{r}
+```{r data-viz-for-stories}
 duodata |> 
   ggplot(aes(x = drop_day)) + 
   geom_histogram(fill = "#7ac70c") + 
@@ -617,18 +623,27 @@ duodata |>
   theme_minimal() 
 ```
 
+# Dimension Reduction
+
+```{r standardize}
+duodata <- duodata |> 
+  mutate(across(where(is.numeric), scale),
+         across(where(is.numeric), as.vector))
+```
+
 ```{r pca}
-duo_pca <- PCA(dplyr::select(duodata, where(is.numeric)))
+duo_pca <- PCA(dplyr::select(duodata, where(is.numeric)), ncp = 10)
 ```
 
 ```{r examine-PCA}
-get_eigenvalue(duo_pca)
 fviz_eig(duo_pca, addlabels = TRUE)
 
 var <- get_pca_var(duo_pca)
-corrplot(var$cor, tl.col = "black", method = "color")
 
-var$cos2
+corrplot(var$cor, 
+         tl.col = "black", 
+         method = "color")
+
 corrplot(var$cos2, 
          is.corr = FALSE, 
          tl.col = "black", 
@@ -637,9 +652,11 @@ corrplot(var$cos2,
 
 # Create Clusters
 
+## Hierarchical 
+
 ```{r hierarchical}
 duo_diff <- dist(duodata, method = "euclidean")
-duo_hc_c <- hclust(duo_diff, method = "complete")
+duo_hc_c <- hclust(duo_diff, method = "ward.D")
 
 duo_dend <- as.dendrogram(duo_hc_c)|> 
   color_labels(k = 3)  |> 
@@ -647,129 +664,198 @@ duo_dend <- as.dendrogram(duo_hc_c)|>
 
 duo_dend |> 
   set("labels_cex", 0.5) |> 
-  plot(main = "Complete")
+  plot(main = "User Engagement Clusters")
 ```
 
-```{r Gaussian}
-#library(mclust)
-#How do we make it cluster by user not by instance??
-duodata |> 
-  group_by(user) |> 
-  summarize()
+## GMM
 
+```{r build-gmms}
+#Assign PCA Values to Observations
+dims <- get_pca_ind(duo_pca)
+duodata_pca <- duodata |> 
+  mutate(pca_dim1 = dims$coord[,1],
+         pca_dim2 = dims$coord[,2],
+         pca_dim3 = dims$coord[,3],
+         pca_dim4 = dims$coord[,4])
 
-set.seed(1234)
-gmm_1 <- Mclust(data = duodata, 
-                G = 4)
-summary(gmm_1)
+#Build GMM with PCA
+gmm_pca <- Mclust(data = dplyr::select(duodata_pca, starts_with("pca_dim")))
+summary(gmm_pca)
 
-gmm_preds <- predict(gmm_1)
-
-duodata_gmm <- bind_cols(duodata, gmm_preds$classification) |> 
-  rename(gmm_cluster = ...31)
-
-duodata_gmm |> 
-  dplyr::select(instance_id, user, gmm_cluster) |> 
-  summarize(avg_clust = median(gmm_cluster))
-
-# #To assign back to the data
-# gmm_preds <- predict(gmm_1)
-# 
-# d1_gmm <- bind_cols(d1, gmm_preds$z) |> 
-#   mutate(.cluster = gmm_preds$classification)
-# 
-# d1_gmm
+#Build GMM withOUT PCA - We just get 1 cluster!
+gmm_no_pca <- Mclust(data = dplyr::select(duodata_pca, -user, -starts_with("pca_dim")))
+summary(gmm_no_pca)
 ```
 
-# Build Model
+```{r assign-clusters}
+#Attach clusters to data
+gmm_preds <- predict(gmm_pca)
+duodata_pca_gmm <- bind_cols(duodata_pca, gmm_preds$classification) 
+
+#Rename gmm_cluster column
+duodata_pca_gmm <- duodata_pca_gmm |> 
+  rename(gmm_cluster = ...32)
+```
+
+```{r viz-pca-dims-by-clusters}
+duodata_pca_gmm |> 
+  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
+  ggplot(aes(x = pca_dim1, 
+             y = pca_dim2)) + 
+  geom_point(aes(color = gmm_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension', 
+       subtitle = 'Front View', 
+       x = 'PCA Dimension 1', 
+       y = 'PCA Dimension 2') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+
+duodata_pca_gmm |> 
+  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
+  ggplot(aes(x = pca_dim1, 
+             y = pca_dim3)) + 
+  geom_point(aes(color = gmm_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension',
+       subtitle = 'Bottom View', 
+       x = 'PCA Dimension 1', 
+       y = 'PCA Dimension 3') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+
+duodata_pca_gmm |> 
+  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
+  ggplot(aes(x = pca_dim3, 
+             y = pca_dim2)) + 
+  geom_point(aes(color = gmm_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension', 
+       subtitle = 'Side View', 
+       x = 'PCA Dimension 1', 
+       y = 'PCA Dimension 3') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+```
+
+```{r pca-3d}
+mycolors <- c('red', 'gold', 'forestgreen', 'royalblue3', 'skyblue3', 'purple', 'hotpink')
+duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
+
+#Plot the 3rd PCA dimension, with labels (little harder to read)
+plot3d(x = duodata_pca_gmm$pca_dim1, 
+       y = duodata_pca_gmm$pca_dim2, 
+       z = duodata_pca_gmm$pca_dim3,
+       col = duodata_pca_gmm$color, 
+       #type = 's', 
+       #radius = .15, 
+       xlab = 'PCA Dim 1', 
+       ylab = 'PCA Dim 2', 
+       zlab = 'PCA Dim 3', 
+       box = FALSE)
+```
+
+```{r examine-var-importance}
+#PCA Variable Averages
+cluster_averages <- duodata_pca_gmm |>
+  dplyr::select(gmm_cluster, starts_with("pca_dim")) |> 
+  group_by(gmm_cluster) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-gmm_cluster, 
+               names_to = "engagement_metrics", 
+               values_to = "value")
+
+ggplot(cluster_averages, 
+       aes(x = engagement_metrics, 
+           y = value, 
+           fill = engagement_metrics)) + 
+  geom_col() +
+  geom_text(aes(label = round(value, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_wrap(~ gmm_cluster) +
+  labs(x = "Engagement Metric", 
+       y = "Value", 
+       title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none")
+
+
+
+#Non-PCA Variables Average
+cluster_averages <- duodata_pca_gmm |>
+  dplyr::select(-starts_with("pca_dim")) |>
+  group_by(gmm_cluster) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-gmm_cluster, 
+               names_to = "engagement_metrics", 
+               values_to = "value")
+
+ggplot(cluster_averages, aes(x = engagement_metrics, 
+                             y = value, 
+                             fill = engagement_metrics)) + 
+  geom_col() +
+  geom_text(aes(label = round(value, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_grid(~ gmm_cluster) +
+  labs(x = "Engagement Metric", 
+       y = "Value", 
+       title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none")
+```
+
+# Build Predictive Model
 
 ## Split Data
 
-```{r split-data-on-user}
-set.seed(1234)
-
-unique_users <- unique(duodata$user)
-
-# Randomly split unique users into training and testing sets
-train_users <- sample(unique_users, size = floor(0.8 * length(unique_users)))
-
-# Create traiing and testing sets based on user split
-train_by_users <- duodata |> filter(user %in% train_users)
-test_by_users <- duodata |> filter(!(user %in% train_users))
-```
-
 ```{r split-data}
+#NOTE: Data already standardized
 set.seed(1234) 
-train <- sample_frac(duodata, 0.8)
-test <- filter(duodata, !duodata$instance_id %in% train$instance_id) 
-```
-
-```{r build-rf}
-m_rf <- randomForest(as_factor(label) ~ .
-                     - exercise_accuracy
-                     - instance_id 
-                     - exercise_id
-                     - session_id,
-                     data = train, 
-                     ntree = 100,
-                     mtry = 5)
-
-m_rf
-```
-
-```{r info-rf}
-vip(m_rf)
-
-#Error Rates
-error_rates <- as_tibble(m_rf$err.rate)
-error_rates <- error_rates |>
-  mutate(Tree = 1:nrow(error_rates)) |>
-  pivot_longer(cols = -Tree, names_to = "Type", values_to = "Error")
-ggplot(error_rates, aes(x = Tree, 
-                        y = Error, 
-                        color = Type)) + 
-  geom_line() +
-  theme_bw()
-
-plot(m_rf)
-```
-
-```{r predict-rf}
-#Train
-predicted_label <- predict(m_rf, train)
-confusion_rf <- table(predicted_label, train$label)
-confusion_rf
-accuracy_rf <- sum(diag(confusion_rf)) / nrow(train)
-accuracy_rf
-
-#Test
-predicted_label <- predict(m_rf, test)
-confusion_rf <- table(predicted_label, test$label)
-confusion_rf
-accuracy_rf <- sum(diag(confusion_rf)) / nrow(test)
-accuracy_rf
+train <- sample_frac(duodata_pca_gmm, 0.8)
+test <- filter(duodata_pca_gmm, !duodata_pca_gmm$user %in% train$user) 
 ```
 
 ```{r build-boost-rf}
-# trControl = trainControl(method = "cv", 
-#                          number = 10)
-
 trControl = trainControl(method = "cv",
-                         number = 10, 
-                         classProbs = TRUE, 
-                         summaryFunction = twoClassSummary, 
-                         sampling = 'down')
+                         number = 10)
 
-levels(train$label) <- make.names(levels(train$label))
+#Build without PCA Dimensions and without Clusters
+# train <- train |> dplyr::select(-user, 
+#                                 -starts_with("pca_dim"), 
+#                                 -gmm_cluster)
+# test <- test |> dplyr::select(-user, 
+#                               -starts_with("pca_dim"), 
+#                               -gmm_cluster)
+
+#Build with ONLY PCA
+# train <- train |> dplyr::select(drop_day, 
+#                                 starts_with("pca_dim"))
+# test <- test |> dplyr::select(drop_day, 
+#                               starts_with("pca_dim"))
+
+#Build with ONLY GMM Cluster
+# train <- train |> dplyr::select(drop_day, 
+#                                 gmm_cluster)
+# test <- test |> dplyr::select(drop_day, 
+#                               gmm_cluster)
+
+#Build with PCA AND GMM
+train <- train |> dplyr::select(drop_day,
+                                gmm_cluster,
+                                starts_with("pca_dim"))
+test <- test |> dplyr::select(drop_day,
+                              gmm_cluster,
+                              starts_with("pca_dim"))
 
 set.seed(1234)
-m_boost_rf <- train(as.factor(label) ~ . 
-                    - exercise_accuracy 
-                    - user
-                     - instance_id 
-                     - exercise_id
-                     - session_id
-                    -token,
+m_boost_rf <- train(drop_day ~ .,
                    data = train, 
                    method = "xgbTree", 
                    trControl = trControl, 
@@ -778,24 +864,31 @@ m_boost_rf <- train(as.factor(label) ~ .
 ```
 
 ```{r info-boost-rf}
-summary(m_boost_rf)
 plot(m_boost_rf)
-print(m_boost_rf)
 varImp(m_boost_rf)
 ```
 
 ```{r predict-rf}
-#Train
-predicted_label <- predict(m_boost_rf, train)
-confusion_boost_rf <- table(predicted_label, train$label)
-confusion_boost_rf
-accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(train)
-accuracy_boost_rf
+predicted_drop_train_rf <- predict(m_boost_rf, train)
+predicted_drop_test_rf <- predict(m_boost_rf, test)
 
-#Test
-predicted_label <- predict(m_boost_rf, test)
-confusion_boost_rf <- table(predicted_label, test$label)
-confusion_boost_rf
-accuracy_boost_rf <- sum(diag(confusion_rf)) / nrow(test)
-accuracy_boost_rf
+train_predictions <- tibble(predicted_drop = predicted_drop_train_rf,
+                            drop = train$drop_day, 
+                            source = 'train')
+
+test_predictions <- tibble(predicted_drop = predicted_drop_test_rf,
+                           drop = test$drop_day,
+                           source = 'test')
+
+all_predictions <- bind_rows(train_predictions, test_predictions)
+
+ggplot(all_predictions, 
+       aes(x = drop,
+           y = predicted_drop, 
+           color = source)) +
+  geom_point() +
+  geom_abline(aes(intercept = 0, 
+                  slope = 1), 
+              lty = 2) +
+  theme_bw()
 ```
