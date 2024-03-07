@@ -13,11 +13,11 @@ engagement_metrics <- duodata |>
 
 set.seed(1234)
 
-engagement_metrics_scaled <- engagement_metrics |> scale()
+engagement_metrics_scaled <- engagement_metrics |> mutate(across(where(is.numeric), scale))
 ```
 
 ```{r PCA}
-pca <- PCA(engagement_metrics, ncp = 6, scale.unit = TRUE)
+pca <- PCA(engagement_metrics_scaled, ncp = 6, scale.unit = TRUE)
 var <- get_pca_var(pca)
 ```
 
@@ -43,7 +43,7 @@ pca_dims_hc <- hclust(pca_dist_matrix, method = "ward.D")
 
 plot(pca_dims_hc)
 
-k = 5
+k = 2
 
 hc_dend <- as.dendrogram(pca_dims_hc)|> 
   color_labels(k = k)  |> 
@@ -75,8 +75,6 @@ hc_dend |>
   set("labels_cex", 0.5) |> 
   plot(main = "User Engagement Clusters")
 
-
-
 # take the cluster and assign it back to the variable... is this possible??
 # object I get should have the labels
 # Figure out what to do next with the clusters
@@ -88,9 +86,9 @@ hc_cut <- cutree(hc, k = k)
 sil_scores <- silhouette(hc_cut, dist = dist_matrix)
 fviz_silhouette(sil_scores)
 
-engagement_metrics$hc_cluster <- hc_cut
+engagement_metrics_scaled$hc_cluster <- hc_cut
 
-ggplot(engagement_metrics, aes(x = as.factor(hc_cluster), fill = as.factor(hc_cluster))) +
+ggplot(engagement_metrics_scaled, aes(x = as.factor(hc_cluster), fill = as.factor(hc_cluster))) +
   geom_bar() +
   labs(title = "Number of Users in Each Cluster",
        x = "Cluster",
@@ -100,13 +98,14 @@ ggplot(engagement_metrics, aes(x = as.factor(hc_cluster), fill = as.factor(hc_cl
 ```
 
 ```{r plot average engagement_metrics per cluster}
-cluster_averages <- engagement_metrics |>
+# YOU NEED TO STANDARDIZE THESE VALUES BEFORE YOU GRAPH THEM!!!!
+cluster_averages <- engagement_metrics_scaled |>
   group_by(hc_cluster) |>
   summarize(across(where(is.numeric), mean)) |>
   ungroup() |>
-  pivot_longer(-hc_cluster, names_to = "engagement_metrics", values_to = "value")
+  pivot_longer(-hc_cluster, names_to = "metrics", values_to = "value")
 
-ggplot(cluster_averages, aes(x = engagement_metrics, y = value, fill = engagement_metrics)) + 
+ggplot(cluster_averages, aes(x = metrics, y = value, fill = metrics)) + 
   geom_col() +
   geom_text(aes(label = round(value, 2)), position = position_dodge(width = 0.9), hjust = -0.2, vjust = 0.5) +
   coord_flip() +
@@ -114,6 +113,59 @@ ggplot(cluster_averages, aes(x = engagement_metrics, y = value, fill = engagemen
   theme_minimal() + 
   labs(x = "Engagement Metric", y = "Value", title = "Engagement Metrics by Cluster") +
   theme(legend.position = "none")
+
+# REMOVE hc_cluster from tibble
+engagement_metrics_scaled <- engagement_metrics_scaled |> dplyr::select(-hc_cluster)
+# KEEP STANDARDIZE
+```
+
+```{r}
+library(mclust)
+
+dims <- get_pca_ind(pca)
+
+metrics <- engagement_metrics_scaled |>
+  mutate(pca_dim1 = dims$coord[,1],
+         pca_dim2 = dims$coord[,2],
+         pca_dim3 = dims$coord[,3],
+         pca_dim4 = dims$coord[,4])
+
+gmm <- Mclust(dplyr::select(metrics, starts_with("pca_dim")))
+
+gmm$G
+gmm
+```
+
+```{r}
+pca_scores <- get_pca(pca, element = "ind")
+scores_df <- as.data.frame(pca_scores$coord)
+scores_tibble <- as_tibble(scores_df)
+
+engagement_metrics_scaled$gmm <- gmm$classification
+
+classifications <- bind_cols(engagement_metrics_scaled, scores_tibble)
+
+# classifications <- engagement_metrics_scaled |>
+#   dplyr::select(starts_with("Dim"), gmm)
+
+cluster_averages <- classifications |>
+  group_by(gmm) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-gmm, names_to = "metrics", values_to = "value")
+
+ggplot(cluster_averages, aes(x = metrics, y = value, fill = metrics)) + 
+  geom_col() +
+  geom_text(aes(label = round(value, 2)), position = position_dodge(width = 0.9), hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_wrap(~ gmm) +
+  labs(x = "Engagement Metric", y = "Value", title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none")
+```
+
+```{r}
+test <- Mclust(scale(engagement_metrics))
+test
 ```
 
 ```{r}
@@ -128,8 +180,6 @@ test <- filter(filtered_data, !duodata$user %in%
 ```
 
 ```{r XGBoost}
-library(xgboost)
-
 filtered_data <- filtered_data |> dplyr::select(-user)
 
 features <- filtered_data[, setdiff(names(filtered_data), "drop_day")]
@@ -169,3 +219,7 @@ print(rmse)
 importance_matrix <- xgb.importance(feature_names = colnames(dtrain), model = xgb_model)
 xgb.plot.importance(importance_matrix)
 ```
+
+For totals, impute 0
+
+For averages, impute the session_avg
