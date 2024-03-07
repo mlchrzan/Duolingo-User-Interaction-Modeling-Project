@@ -37,6 +37,7 @@ library(DescTools)
 library(stats)
 library(dendextend)
 library(ggrepel)
+library(tidytext)
 library(rgl)
 ```
 
@@ -648,6 +649,35 @@ corrplot(var$cos2,
          is.corr = FALSE, 
          tl.col = "black", 
          method = "color")
+```
+
+```{r viz-pca-var-importance}
+var <- get_pca_var(duo_pca)
+
+t(var$coord) |> 
+  as_tibble(rownames = "NA") |> 
+  rename(dimension = `NA`) |> 
+  pivot_longer(cols = -starts_with("dimension"),
+               names_to = "variable",
+               values_to = "value") |> 
+  mutate(importance = value * value,
+         dimension = as.factor(dimension)) |> 
+  group_by(dimension) |>
+  slice_max(importance, n = 10) |>
+  ungroup() |>
+  mutate(variable = reorder_within(variable,
+                                   by = value,
+                                   within = dimension)) |>  
+  filter(dimension != "Dim.10") |> 
+  ggplot() +
+  geom_col(aes(y = value,
+               x = variable,
+               fill = value > 0)) +
+  facet_wrap(~ dimension,
+             scales = "free_y") +
+  scale_x_reordered() +
+  coord_flip() +
+  guides(fill = "none") 
 ```
 
 # Create Clusters
