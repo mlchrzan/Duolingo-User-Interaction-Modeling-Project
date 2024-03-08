@@ -37,6 +37,7 @@ duodata <- duodata |>
   ungroup()
   #dplyr::select(user, session_id, exercise_id, contains('avg')) 
 
+
 #Averge Number of Exercises per Session (get and remove Number of Exercises by Session_id)
 duodata <- duodata |> 
   group_by(session_id) |> 
@@ -48,6 +49,7 @@ duodata <- duodata |>
   dplyr::select(-num_exercises_this_session)
   #dplyr::select(user, session_id, num_session_exercises, avg_exer_per_session) 
 
+
 #Averge Number of Sessions per Day (get and remove Number of Sessions By Day) 
 duodata <- duodata |> 
   mutate(days_count = floor(days)) |> 
@@ -57,7 +59,8 @@ duodata <- duodata |>
   group_by(user) |> 
   mutate(avg_num_sessions_in_day = mean(num_sessions_user_in_day)) |> 
   dplyr::select(-days_count, -num_sessions_user_in_day)
-  #dplyr::select(user, days_count, session_id, num_sessions_this_day, avg_num_sessions)
+  #dplyr::select(user, days_count, session_id, num_sessions_this_day, avg_num_sessions) 
+
 
 #Average Exercise Accuracy by User 
 user_ex_acc <- duodata |> 
@@ -75,6 +78,7 @@ duodata <- left_join(duodata, user_ex_acc,
                      by = join_by(user))
 
 rm(user_ex_acc)
+
 
 #Average Overall Session Accuracy
 user_sess_acc <- duodata |> 
@@ -104,12 +108,10 @@ user_test_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_test_acc, 
-          by = join_by(user)) 
-
-# |> 
-#   mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy, 
-#                                            0, 
-#                                            avg_test_accuracy)))
+                     by = join_by(user)) |>
+  mutate(avg_test_accuracy = if_else(is.na(avg_test_accuracy),
+                                           avg_session_accuracy,
+                                           avg_test_accuracy))
 
 rm(user_test_acc)
 
@@ -122,12 +124,10 @@ user_lesson_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_lesson_acc, 
-          by = join_by(user)) 
-
-# |> 
-#   mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy, 
-#                                              0, 
-#                                              avg_lesson_accuracy)))
+          by = join_by(user)) |>
+  mutate(avg_lesson_accuracy = if_else(is.na(avg_lesson_accuracy),
+                                             avg_session_accuracy,
+                                             avg_lesson_accuracy))
 
 rm(user_lesson_acc)
 
@@ -140,12 +140,10 @@ user_practice_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_practice_acc, 
-          by = join_by(user)) 
-
-# |> 
-#   mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy, 
-#                                                0, 
-#                                                avg_practice_accuracy)))
+          by = join_by(user)) |>
+  mutate(avg_practice_accuracy = if_else(is.na(avg_practice_accuracy),
+                                               avg_session_accuracy,
+                                               avg_practice_accuracy))
 
 rm(user_practice_acc)
 
@@ -159,7 +157,10 @@ user_rever_t_acc <- duodata |>
   ungroup()
   
 duodata <- left_join(duodata, user_rever_t_acc, 
-          by = join_by(user)) 
+          by = join_by(user)) |>
+  mutate(avg_reverse_trans_accuracy = if_else(is.na(avg_reverse_trans_accuracy),
+                                                    avg_session_accuracy,
+                                                    avg_reverse_trans_accuracy))
 
 rm(user_rever_t_acc)
 
@@ -172,11 +173,10 @@ user_rever_tap_acc <- duodata |>
   ungroup()
 
 duodata <- left_join(duodata, user_rever_tap_acc, 
-          by = join_by(user)) 
-# |> 
-#   mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy, 
-#                                                     0, 
-#                                                     avg_reverse_tap_accuracy)))
+                     by = join_by(user)) |>
+  mutate(avg_reverse_tap_accuracy = if_else(is.na(avg_reverse_tap_accuracy),
+                                                  avg_session_accuracy,
+                                                  avg_reverse_tap_accuracy))
 
 rm(user_rever_tap_acc)
 
@@ -189,11 +189,10 @@ user_listen_acc <- duodata |>
   ungroup()
   
 duodata <- left_join(duodata, user_listen_acc, 
-                     by = join_by(user)) 
-# |> 
-#   mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy, 
-#                                        0, 
-#                                        avg_listen_accuracy)))
+                     by = join_by(user)) |>
+  mutate(avg_listen_accuracy = if_else(is.na(avg_listen_accuracy),
+                                       avg_session_accuracy,
+                                       avg_listen_accuracy))
 
 rm(user_listen_acc)
   
@@ -250,29 +249,35 @@ n_test <- duodata |>
   filter(session == 'test') |> 
   group_by(user) |>
   summarize(total_test_sessions = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_test, by = join_by(user))
+duodata <- left_join(duodata, n_test, by = join_by(user)) |> 
+  mutate(total_test_sessions = if_else(is.na(total_test_sessions), 0, total_test_sessions))
+
 rm(n_test)
 
-#Practice
+  #Practice
 n_practice <- duodata |> 
   filter(session == 'practice') |> 
   group_by(user) |>
   summarize(total_practice_sessions = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_practice, by = join_by(user))
+duodata <- left_join(duodata, n_practice, by = join_by(user)) |> 
+  mutate(total_practice_sessions = if_else(is.na(total_practice_sessions), 0, total_practice_sessions))
+
 rm(n_practice)
 
-#Lesson
+  #Lesson
 n_lesson <- duodata |> 
   filter(session == 'lesson') |> 
   group_by(user) |>
   summarize(total_lesson_sessions = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_lesson, by = join_by(user))
+duodata <- left_join(duodata, n_lesson, by = join_by(user)) |> 
+  mutate(total_lesson_sessions = if_else(is.na(total_lesson_sessions), 0, total_lesson_sessions))
+
 rm(n_lesson)
 
 
@@ -284,7 +289,9 @@ n_rever_t <- duodata |>
   summarize(total_reverse_translate = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata, n_rever_t, by = join_by(user))
+duodata <- left_join(duodata, n_rever_t, by = join_by(user))  |> 
+  mutate(total_reverse_translate = if_else(is.na(total_reverse_translate), 0, total_reverse_translate))
+
 rm(n_rever_t)
 
   #Reverse_tap
@@ -294,7 +301,9 @@ n_rever_tap <- duodata |>
   summarize(total_reverse_tap = n_distinct(session_id)) |> 
   ungroup()
 
-duodata <- left_join(duodata, n_rever_tap, by = join_by(user))
+duodata <- left_join(duodata, n_rever_tap, by = join_by(user)) |> 
+  mutate(total_reverse_tap = if_else(is.na(total_reverse_tap), 0, total_reverse_tap))
+
 rm(n_rever_tap)
 
   #Listen
@@ -302,13 +311,17 @@ n_listen <- duodata |>
   filter(format == 'listen') |> 
   group_by(user) |>
   summarize(total_listen = n_distinct(session_id)) |> 
-  ungroup()
+  ungroup() 
 
-duodata <- left_join(duodata, n_listen, by = join_by(user))
+duodata <- left_join(duodata, n_listen, by = join_by(user)) |> 
+  mutate(total_listen = if_else(is.na(total_listen), 0, total_listen))
+
 rm(n_listen)
+
 
   
 #OTHER
+
 
 #Get Number of Days Skipped by User
 skipped <- duodata |>
