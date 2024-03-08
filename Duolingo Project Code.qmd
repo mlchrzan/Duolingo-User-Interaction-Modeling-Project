@@ -51,7 +51,7 @@ duodata <- read_csv("data_flatformat.csv")
 
 ```{r view-data}
 #glimpse(duodata)
-duoskim <- skim(duodata)
+#duoskim <- skim(duodata)
 duoskim
 ```
 
@@ -210,8 +210,7 @@ duodata <- duodata |>
 duodata <- duodata |> 
   group_by(user) |> 
   mutate(avg_total_accuracy = mean(label), 
-         avg_session_time = mean(time), 
-         avg_days = mean(days)) |> 
+         avg_session_time = mean(time)) |> 
   ungroup()
   #dplyr::select(user, session_id, exercise_id, contains('avg')) 
 
@@ -602,15 +601,15 @@ duodata |>
        y = 'Number of Users Lost') +
   theme_minimal()
 
-duodata |> 
-  ggplot(aes(x = avg_days)) + 
-  geom_histogram(fill = "#7ac70c") + 
-  labs(title = 'Users Average Number of Days',
-       subtitle = 'As time progresses, less and less users return to the app', 
-       x = 'Days', 
-       y = 'Number of Users') +
-  scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
-  theme_minimal() 
+# duodata |> 
+#   ggplot(aes(x = avg_days)) + 
+#   geom_histogram(fill = "#7ac70c") + 
+#   labs(title = 'Users Average Number of Days',
+#        subtitle = 'As time progresses, less and less users return to the app', 
+#        x = 'Days', 
+#        y = 'Number of Users') +
+#   scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
+#   theme_minimal() 
 
 duodata |> 
   #filter(days_skipped_user > 0) |> 
@@ -637,7 +636,7 @@ duo_pca <- PCA(dplyr::select(duodata, where(is.numeric)), ncp = 10)
 ```
 
 ```{r examine-PCA}
-fviz_eig(duo_pca, addlabels = TRUE)
+fviz_eig(duo_pca, addlabels = TRUE, barfill = '#7ac70c')
 
 var <- get_pca_var(duo_pca)
 
@@ -668,21 +667,46 @@ t(var$coord) |>
   mutate(variable = reorder_within(variable,
                                    by = value,
                                    within = dimension)) |>  
-  filter(dimension != "Dim.10") |> 
+  filter(dimension == "Dim.1" |
+           dimension == "Dim.2" |
+           dimension == "Dim.3" |
+           dimension == "Dim.4") |> 
+  # mutate(dimension = case_when(dimension == "Dim.1" ~ "1.Accuracy",
+  #                              dimension == "Dim.2" ~ '2.Investment', 
+  #                              dimension == "Dim.3" ~ '3.Rushedness', 
+  #                              dimension == "Dim.4" ~ '4.Burnout')) |> 
   ggplot() +
   geom_col(aes(y = value,
-               x = variable,
+               x = variable, 
                fill = value > 0)) +
   facet_wrap(~ dimension,
              scales = "free_y") +
-  scale_x_reordered() +
+  scale_x_reordered() + 
   coord_flip() +
-  guides(fill = "none") 
+  guides(fill = "none") + 
+  labs(title = 'How do these variables relate?', 
+       subtitle = 'Duolingo Latent Variable Component Analysis')
+```
+
+```{r join-pca-values-to-data}
+#Assign PCA Values to Observations
+dims <- get_pca_ind(duo_pca)
+duodata_pca <- duodata |> 
+  mutate(pca_dim1 = dims$coord[,1],
+         pca_dim2 = dims$coord[,2],
+         pca_dim3 = dims$coord[,3],
+         pca_dim4 = dims$coord[,4])
+
+duodata <- duodata |> 
+  mutate(pca_dim1 = dims$coord[,1],
+         pca_dim2 = dims$coord[,2],
+         pca_dim3 = dims$coord[,3],
+         pca_dim4 = dims$coord[,4])
 ```
 
 # Create Clusters
 
-## Hierarchical 
+## Hierarchical
 
 ```{r hierarchical}
 duo_diff <- dist(duodata, method = "euclidean")
@@ -697,34 +721,151 @@ duo_dend |>
   plot(main = "User Engagement Clusters")
 ```
 
+```{r assign-hc-cluster}
+hc_cut <- cutree(duo_hc_c, k = 3)
+
+duodata$hc_cluster <- hc_cut
+dplyr::select(duodata, user, hc_cluster)
+```
+
+```{r viz-hc-pca-dims-by-clusters}
+duodata |> 
+  mutate(hc_cluster = as.factor(hc_cluster)) |> 
+  ggplot(aes(x = pca_dim1, 
+             y = pca_dim2)) + 
+  geom_point(aes(color = hc_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension', 
+       subtitle = 'Front View', 
+       x = 'PCA Dimension 1', 
+       y = 'PCA Dimension 2') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+
+duodata |> 
+  mutate(hc_cluster = as.factor(hc_cluster)) |> 
+  ggplot(aes(x = pca_dim1, 
+             y = pca_dim3)) + 
+  geom_point(aes(color = hc_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension',
+       subtitle = 'Bottom View', 
+       x = 'PCA Dimension 1', 
+       y = 'PCA Dimension 3') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+
+duodata |> 
+  mutate(hc_cluster = as.factor(hc_cluster)) |> 
+  ggplot(aes(x = pca_dim3, 
+             y = pca_dim2)) + 
+  geom_point(aes(color = hc_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension', 
+       subtitle = 'Side View', 
+       x = 'PCA Dimension 3', 
+       y = 'PCA Dimension 2') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom') 
+```
+
+```{r pca-3d}
+mycolors <- c('red', 'blue', 'green')
+duodata$color <- mycolors[ as.numeric(duodata$hc_cluster) ]
+
+#Plot the 3rd PCA dimension, with labels (little harder to read)
+plot3d(x = duodata$pca_dim1, 
+       y = duodata$pca_dim2, 
+       z = duodata$pca_dim3,
+       col = duodata$color, 
+       type = 's', 
+       radius = .5, 
+       xlab = 'PCA Dim 1', 
+       ylab = 'PCA Dim 2', 
+       zlab = 'PCA Dim 3', 
+       box = FALSE) 
+```
+
+```{r examine-var-importance}
+#PCA Variable Averages
+cluster_averages <- duodata |>
+  dplyr::select(hc_cluster, starts_with("pca_dim")) |> 
+  group_by(hc_cluster) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-hc_cluster, 
+               names_to = "engagement_metrics", 
+               values_to = "value")
+
+cluster_averages |> 
+  mutate(engagement_metrics = case_when(engagement_metrics == "pca_dim1" ~ "1.Accuracy",
+                               engagement_metrics == "pca_dim2" ~ '2.Investment', 
+                               engagement_metrics == "pca_dim3" ~ '3.Rushedness', 
+                               engagement_metrics == "pca_dim4" ~ '4.Burnout')) |> 
+ggplot(aes(x = engagement_metrics, 
+           y = value, 
+           fill = engagement_metrics)) + 
+  geom_col() +
+  geom_text(aes(label = round(value, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_wrap(~ hc_cluster) +
+  labs(x = "Engagement Metric", 
+       y = "Value", 
+       title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none") 
+
+
+
+#Non-PCA Variables Average
+cluster_averages <- duodata |>
+  dplyr::select(-starts_with("pca_dim")) |>
+  group_by(hc_cluster) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-hc_cluster, 
+               names_to = "engagement_metrics", 
+               values_to = "value")
+
+ggplot(cluster_averages, aes(x = engagement_metrics, 
+                             y = value, 
+                             fill = engagement_metrics)) + 
+  geom_col() +
+  geom_text(aes(label = round(value, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_grid(~ hc_cluster) +
+  labs(x = "Engagement Metric", 
+       y = "Value", 
+       title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none")
+```
+
 ## GMM
 
 ```{r build-gmms}
-#Assign PCA Values to Observations
-dims <- get_pca_ind(duo_pca)
-duodata_pca <- duodata |> 
-  mutate(pca_dim1 = dims$coord[,1],
-         pca_dim2 = dims$coord[,2],
-         pca_dim3 = dims$coord[,3],
-         pca_dim4 = dims$coord[,4])
-
 #Build GMM with PCA
 gmm_pca <- Mclust(data = dplyr::select(duodata_pca, starts_with("pca_dim")))
-summary(gmm_pca)
+summary(gmm_pca) 
 
 #Build GMM withOUT PCA - We just get 1 cluster!
 gmm_no_pca <- Mclust(data = dplyr::select(duodata_pca, -user, -starts_with("pca_dim")))
-summary(gmm_no_pca)
+summary(gmm_no_pca) 
 ```
 
 ```{r assign-clusters}
 #Attach clusters to data
-gmm_preds <- predict(gmm_pca)
+gmm_preds <- predict(gmm_pca) 
 duodata_pca_gmm <- bind_cols(duodata_pca, gmm_preds$classification) 
 
 #Rename gmm_cluster column
 duodata_pca_gmm <- duodata_pca_gmm |> 
-  rename(gmm_cluster = ...32)
+  rename(gmm_cluster = ...31) 
 ```
 
 ```{r viz-pca-dims-by-clusters}
@@ -848,49 +989,144 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
 ```{r split-data}
 #NOTE: Data already standardized
 set.seed(1234) 
-train <- sample_frac(duodata_pca_gmm, 0.8)
-test <- filter(duodata_pca_gmm, !duodata_pca_gmm$user %in% train$user) 
+train <- sample_frac(duodata, 0.8) 
+test <- filter(duodata, !duodata$user %in% train$user) 
 ```
 
-```{r build-boost-rf}
+```{r build-samples}
+#Build without PCA Dimensions and without Clusters
+train_samp1 <- train |> dplyr::select(-user,
+                                -starts_with("pca_dim"),
+                                -hc_cluster)
+test_samp1 <- test |> dplyr::select(-user,
+                              -starts_with("pca_dim"),
+                              -hc_cluster)
+
+#Build with ONLY PCA
+train_samp_pca <- train |> dplyr::select(drop_day,
+                                starts_with("pca_dim"))
+test_samp_pca <- test |> dplyr::select(drop_day,
+                              starts_with("pca_dim"))
+
+#Build with ONLY GMM Cluster
+train_samp_clust <- train |> dplyr::select(drop_day,
+                                hc_cluster)
+test_samp_clust <- test |> dplyr::select(drop_day,
+                              hc_cluster)
+
+#Build with PCA AND GMM
+train_samp_both <- train |> dplyr::select(drop_day,
+                                hc_cluster,
+                                starts_with("pca_dim"))
+test_samp_both <- test |> dplyr::select(drop_day,
+                              hc_cluster,
+                              starts_with("pca_dim"))
+```
+
+```{r build-models}
 trControl = trainControl(method = "cv",
                          number = 10)
 
-#Build without PCA Dimensions and without Clusters
-# train <- train |> dplyr::select(-user, 
-#                                 -starts_with("pca_dim"), 
-#                                 -gmm_cluster)
-# test <- test |> dplyr::select(-user, 
-#                               -starts_with("pca_dim"), 
-#                               -gmm_cluster)
+rmse_results <- tibble(samp = character(), 
+                       min_rmse = double())
 
-#Build with ONLY PCA
-# train <- train |> dplyr::select(drop_day, 
-#                                 starts_with("pca_dim"))
-# test <- test |> dplyr::select(drop_day, 
-#                               starts_with("pca_dim"))
-
-#Build with ONLY GMM Cluster
-# train <- train |> dplyr::select(drop_day, 
-#                                 gmm_cluster)
-# test <- test |> dplyr::select(drop_day, 
-#                               gmm_cluster)
-
-#Build with PCA AND GMM
-train <- train |> dplyr::select(drop_day,
-                                gmm_cluster,
-                                starts_with("pca_dim"))
-test <- test |> dplyr::select(drop_day,
-                              gmm_cluster,
-                              starts_with("pca_dim"))
-
+#First
 set.seed(1234)
-m_boost_rf <- train(drop_day ~ .,
-                   data = train, 
-                   method = "xgbTree", 
-                   trControl = trControl, 
-                   verbose = FALSE, 
-                   verbosity = 0)
+m_boost_rf_1 <- train(drop_day ~ .,
+                    data = train_samp1, 
+                    method = "xgbTree", 
+                    trControl = trControl, 
+                    verbose = FALSE, 
+                    verbosity = 0)
+
+rmse_results <- bind_rows(rmse_results, 
+                          tibble(samp = 'train_samp1', 
+                                 min_rmse = min(m_boost_rf_1$resample$RMSE)))
+
+#Second
+set.seed(1234)
+m_boost_rf_pca <- train(drop_day ~ .,
+                    data = train_samp_pca, 
+                    method = "xgbTree", 
+                    trControl = trControl, 
+                    verbose = FALSE, 
+                    verbosity = 0)
+
+rmse_results <- bind_rows(rmse_results, 
+                          tibble(samp = 'train_samp_pca', 
+                                 min_rmse = min(m_boost_rf_pca$resample$RMSE)))
+
+#Third
+set.seed(1234)
+m_boost_rf_hc <- train(drop_day ~ .,
+                    data = train_samp_clust, 
+                    method = "xgbTree", 
+                    trControl = trControl, 
+                    verbose = FALSE, 
+                    verbosity = 0)
+
+rmse_results <- bind_rows(rmse_results, 
+                          tibble(samp = 'train_samp_clust', 
+                                 min_rmse = min(m_boost_rf_hc$resample$RMSE)))
+
+
+#Fourth
+set.seed(1234)
+m_boost_rf_both <- train(drop_day ~ .,
+                    data = train_samp_both, 
+                    method = "xgbTree", 
+                    trControl = trControl, 
+                    verbose = FALSE, 
+                    verbosity = 0)
+
+rmse_results <- bind_rows(rmse_results, 
+                          tibble(samp = 'train_samp_both', 
+                                 min_rmse = min(m_boost_rf_both$resample$RMSE)))
+```
+
+```{r model-results}
+saved_result <- rmse_results
+rmse_results <- saved_result
+rmse_results <- rmse_results |> 
+  mutate(samp = case_when(samp == 'train_samp1' ~ "No Groupings", 
+                          samp == 'train_samp_pca' ~ "PCA Dimensions", 
+                          samp == 'train_samp_clust' ~ "HC Clusters", 
+                          samp == 'train_samp_both' ~ "Both Dimension Reductions"), 
+         min_rmse = 1 - min_rmse, 
+         samp = as.factor(samp))
+
+rmse_results |> 
+  ggplot(aes(x = forcats::fct_reorder(samp, min_rmse), 
+             y = min_rmse, 
+             fill = samp)) + 
+  geom_col() + 
+  geom_text(aes(label = round(min_rmse, 4)), 
+            position = position_dodge(width = 0.9), 
+            vjust = 0) + 
+  labs(title = "Model Performance on Different Samples", 
+       subtitle = 'Model Performance Given as 1-Standardized_RMSE', 
+       x = 'Sample', 
+       y = '1 - RMSE') +
+  theme_minimal() +
+  theme(legend.position = 'none') 
+
+
+rmse_results |> 
+  ggplot(aes(x = forcats::fct_reorder(samp, min_rmse), 
+             y = min_rmse)) + 
+  geom_col() + 
+  geom_col(data = rmse_results |> filter(samp %in% c("PCA Dimensions", 
+                                                     "Both Dimension Reductions")), 
+           fill = "#7ac70c") + 
+  geom_text(aes(label = round(min_rmse, 4)), 
+            position = position_dodge(width = 0.9), 
+            vjust = 0) + 
+  labs(title = "Model Performance on Different Samples", 
+       subtitle = 'Model Performance Given as 1-Standardized_RMSE', 
+       x = 'Sample', 
+       y = '1 - RMSE') +
+  theme_minimal() +
+  theme(legend.position = 'none') 
 ```
 
 ```{r info-boost-rf}
