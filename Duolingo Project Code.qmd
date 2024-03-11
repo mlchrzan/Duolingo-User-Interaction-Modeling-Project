@@ -39,6 +39,7 @@ library(dendextend)
 library(ggrepel)
 library(tidytext)
 library(rgl)
+library(plotly)
 ```
 
 ## Import Data
@@ -773,7 +774,7 @@ duodata |>
 ```
 
 ```{r pca-3d}
-mycolors <- c('red', 'blue', 'green')
+mycolors <- c('red', 'green', 'blue')
 duodata$color <- mycolors[ as.numeric(duodata$hc_cluster) ]
 
 #Plot the 3rd PCA dimension, with labels (little harder to read)
@@ -807,8 +808,8 @@ cluster_averages |>
                                engagement_metrics == "pca_dim4" ~ '4.Burnout')) |> 
 ggplot(aes(x = engagement_metrics, 
            y = value, 
-           fill = engagement_metrics)) + 
-  geom_col() +
+           fill = as.factor(hc_cluster))) + 
+  geom_col() + 
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
             hjust = -0.2, vjust = 0.5) +
@@ -833,7 +834,7 @@ cluster_averages <- duodata |>
 
 ggplot(cluster_averages, aes(x = engagement_metrics, 
                              y = value, 
-                             fill = engagement_metrics)) + 
+                             fill = as.factor(hc_cluster))) + 
   geom_col() +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
@@ -852,10 +853,6 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
 #Build GMM with PCA
 gmm_pca <- Mclust(data = dplyr::select(duodata_pca, starts_with("pca_dim")))
 summary(gmm_pca) 
-
-#Build GMM withOUT PCA - We just get 1 cluster!
-gmm_no_pca <- Mclust(data = dplyr::select(duodata_pca, -user, -starts_with("pca_dim")))
-summary(gmm_no_pca) 
 ```
 
 ```{r assign-clusters}
@@ -866,6 +863,27 @@ duodata_pca_gmm <- bind_cols(duodata_pca, gmm_preds$classification)
 #Rename gmm_cluster column
 duodata_pca_gmm <- duodata_pca_gmm |> 
   rename(gmm_cluster = ...31) 
+```
+
+```{r}
+plot(gmm_1, what = 'uncertainty')
+
+max_probs <- tibble(max_prob = double())
+
+for (n in 1:length(duodata_pca_gmm$user)){
+  max_probs <- bind_rows(max_probs, 
+                         tibble(max_prob = max(gmm_preds$z[n,])))
+}  
+
+duodata_pca_gmm$max_prob <- max_probs$max_prob
+
+duodata_pca_gmm |> dplyr::select(user, max_prob) |> 
+  ggplot(aes(x = max_prob)) + 
+  geom_histogram(fill = '#2952A3') + 
+  labs(title = 'Spread of Max Probabilities from GMM', 
+       x = 'Highest Probability of Cluster Assignment', 
+       y = 'Number of Observations') + 
+  theme_minimal()
 ```
 
 ```{r viz-pca-dims-by-clusters}
@@ -881,7 +899,7 @@ duodata_pca_gmm |>
        x = 'PCA Dimension 1', 
        y = 'PCA Dimension 2') + 
   theme_minimal() +
-  theme(legend.position = 'bottom')
+  theme(legend.position = 'bottom') 
 
 duodata_pca_gmm |> 
   mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
@@ -913,7 +931,7 @@ duodata_pca_gmm |>
 ```
 
 ```{r pca-3d}
-mycolors <- c('red', 'gold', 'forestgreen', 'royalblue3', 'skyblue3', 'purple', 'hotpink')
+mycolors <- c('red', 'gold', 'forestgreen', 'royalblue3', 'skyblue3', 'purple', 'hotpink') 
 duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
 
 #Plot the 3rd PCA dimension, with labels (little harder to read)
@@ -938,12 +956,12 @@ cluster_averages <- duodata_pca_gmm |>
   ungroup() |>
   pivot_longer(-gmm_cluster, 
                names_to = "engagement_metrics", 
-               values_to = "value")
+               values_to = "value") 
 
 ggplot(cluster_averages, 
        aes(x = engagement_metrics, 
            y = value, 
-           fill = engagement_metrics)) + 
+           fill = as.factor(gmm_cluster))) + 
   geom_col() +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
@@ -969,7 +987,7 @@ cluster_averages <- duodata_pca_gmm |>
 
 ggplot(cluster_averages, aes(x = engagement_metrics, 
                              y = value, 
-                             fill = engagement_metrics)) + 
+                             fill = as.factor(gmm_cluster))) + 
   geom_col() +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
@@ -1050,7 +1068,7 @@ m_boost_rf_pca <- train(drop_day ~ .,
                     method = "xgbTree", 
                     trControl = trControl, 
                     verbose = FALSE, 
-                    verbosity = 0)
+                    verbosity = 0) 
 
 rmse_results <- bind_rows(rmse_results, 
                           tibble(samp = 'train_samp_pca', 
@@ -1085,15 +1103,15 @@ rmse_results <- bind_rows(rmse_results,
 ```
 
 ```{r model-results}
-saved_result <- rmse_results
-rmse_results <- saved_result
+#saved_result <- rmse_results
+rmse_results <- saved_result 
 rmse_results <- rmse_results |> 
   mutate(samp = case_when(samp == 'train_samp1' ~ "No Groupings", 
                           samp == 'train_samp_pca' ~ "PCA Dimensions", 
                           samp == 'train_samp_clust' ~ "HC Clusters", 
                           samp == 'train_samp_both' ~ "Both Dimension Reductions"), 
          min_rmse = 1 - min_rmse, 
-         samp = as.factor(samp))
+         samp = as.factor(samp)) 
 
 rmse_results |> 
   ggplot(aes(x = forcats::fct_reorder(samp, min_rmse), 
@@ -1103,7 +1121,7 @@ rmse_results |>
   geom_text(aes(label = round(min_rmse, 4)), 
             position = position_dodge(width = 0.9), 
             vjust = 0) + 
-  labs(title = "Model Performance on Different Samples", 
+  labs(title = "XGBoost Model Performance on Different Samples", 
        subtitle = 'Model Performance Given as 1-Standardized_RMSE', 
        x = 'Sample', 
        y = '1 - RMSE') +
@@ -1121,7 +1139,7 @@ rmse_results |>
   geom_text(aes(label = round(min_rmse, 4)), 
             position = position_dodge(width = 0.9), 
             vjust = 0) + 
-  labs(title = "Model Performance on Different Samples", 
+  labs(title = "XG Boost Model Performance on Different Samples", 
        subtitle = 'Model Performance Given as 1-Standardized_RMSE', 
        x = 'Sample', 
        y = '1 - RMSE') +
@@ -1130,13 +1148,20 @@ rmse_results |>
 ```
 
 ```{r info-boost-rf}
-plot(m_boost_rf)
-varImp(m_boost_rf)
+plot(m_boost_rf_1)
+plot(m_boost_rf_pca)
+plot(m_boost_rf_hc)
+plot(m_boost_rf_both)
+
+varImp(m_boost_rf_1)
+varImp(m_boost_rf_pca)
+#varImp(m_boost_rf_hc)
+varImp(m_boost_rf_both)
 ```
 
 ```{r predict-rf}
-predicted_drop_train_rf <- predict(m_boost_rf, train)
-predicted_drop_test_rf <- predict(m_boost_rf, test)
+predicted_drop_train_rf <- predict(m_boost_rf_both, train)
+predicted_drop_test_rf <- predict(m_boost_rf_both, test)
 
 train_predictions <- tibble(predicted_drop = predicted_drop_train_rf,
                             drop = train$drop_day, 
@@ -1157,4 +1182,58 @@ ggplot(all_predictions,
                   slope = 1), 
               lty = 2) +
   theme_bw()
+```
+
+```{r}
+varImp(m_boost_rf_both)$importance |> 
+  as.data.frame() |> 
+  rownames_to_column() |> 
+  arrange(Overall) |>
+  mutate(rowname = case_when(rowname == 'pca_dim1' ~ 'Accuracy', 
+                             rowname == 'pca_dim2' ~ 'Investment', 
+                             rowname == 'pca_dim3' ~ 'Rushed-ness', 
+                             rowname == 'pca_dim4' ~ 'Burnout', 
+                             rowname == 'hc_cluster' ~ 'Cluster')) |> 
+  ggplot(aes(x = forcats::fct_reorder(rowname, Overall), 
+             y = Overall)) +
+  geom_col(aes(fill = factor(rowname, 
+                             levels = c('Burnout', 'Rushed-ness')))) +
+  scale_fill_manual(values = c('#7ac70c', '#7ac70c')) +
+  coord_flip() + 
+  labs(title = "Variable Importance for PCA + Cluster Model", 
+       subtitle = 'Burnout and Rushedness Dimensions prove to be the most important', 
+       x = 'Variable', 
+       y = 'Overall Importance') +
+  theme_minimal() +
+  theme(legend.position = 'none')
+
+mycolors <- c('red', 'green', 'blue')
+duodata$color <- mycolors[ as.numeric(duodata$hc_cluster) ]
+
+#Plot the 3rd PCA dimension, with labels (little harder to read)
+plot3d(x = duodata$pca_dim3, 
+       y = duodata$pca_dim4, 
+       z = duodata$pca_dim2,
+       col = duodata$color, 
+       type = 's', 
+       radius = .5, 
+       xlab = 'PCA Dim 3', 
+       ylab = 'PCA Dim 4', 
+       zlab = 'PCA Dim 2', 
+       box = FALSE) 
+```
+
+```{r plotly}
+fig <- plot_ly(duodata, 
+               x = ~pca_dim3, 
+               y = ~pca_dim1, 
+               z = ~pca_dim2, 
+               color = ~as.factor(hc_cluster), 
+               size = ~drop_day)
+fig <- fig |> add_markers()
+fig <- fig |> layout(scene = list(xaxis = list(title = 'Dim 3 - Rushed-ness'),
+                     yaxis = list(title = 'Dim 1 - Accuracy'),
+                     zaxis = list(title = 'Dim 2 - Time Investment')))
+
+fig
 ```
