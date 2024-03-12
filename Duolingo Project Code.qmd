@@ -813,9 +813,9 @@ ggplot(aes(x = engagement_metrics,
            fill = value > 0)) + 
   geom_col() + 
   scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
-  geom_text(aes(label = round(value, 2)), 
-            position = position_dodge(width = 0.9), 
-            hjust = -0.2, vjust = 0.5) +
+  #geom_text(aes(label = round(value, 2)), 
+  #          position = position_dodge(width = 0.9), 
+  #          hjust = -0.2, vjust = 0.5) +
   coord_flip() +
   facet_wrap(~ hc_cluster) +
   labs(x = "Engagement Metric", 
@@ -840,168 +840,11 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
                              fill = value > 0)) + 
   geom_col() +
   scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
-  geom_text(aes(label = round(value, 2)), 
-            position = position_dodge(width = 0.9), 
-            hjust = -0.2, vjust = 0.5) +
+  #geom_text(aes(label = round(value, 2)), 
+  #          position = position_dodge(width = 0.9), 
+  #          hjust = -0.2, vjust = 0.5) +
   coord_flip() +
   facet_grid(~ hc_cluster) +
-  labs(x = "Engagement Metric", 
-       y = "Value", 
-       title = "Engagement Metrics by Cluster") +
-  theme(legend.position = "none")
-```
-
-## GMM
-
-```{r build-gmms}
-#Build GMM with PCA
-set.seed(1234)
-gmm_pca <- Mclust(data = dplyr::select(duodata_pca,
-                                       starts_with("pca_dim")))
-summary(gmm_pca) 
-```
-
-```{r assign-clusters}
-#Attach clusters to data
-gmm_preds <- predict(gmm_pca) 
-duodata_pca_gmm <- bind_cols(duodata_pca, gmm_preds$classification) 
-
-#Rename gmm_cluster column
-duodata_pca_gmm <- duodata_pca_gmm |> 
-  rename(gmm_cluster = ...31) 
-```
-
-```{r}
-plot(gmm_1, what = 'uncertainty')
-
-max_probs <- tibble(max_prob = double())
-
-for (n in 1:length(duodata_pca_gmm$user)){
-  max_probs <- bind_rows(max_probs, 
-                         tibble(max_prob = max(gmm_preds$z[n,])))
-}  
-
-duodata_pca_gmm$max_prob <- max_probs$max_prob
-
-duodata_pca_gmm |> dplyr::select(user, max_prob) |> 
-  ggplot(aes(x = max_prob)) + 
-  geom_histogram(fill = '#2952A3') + 
-  labs(title = 'Spread of Max Probabilities from GMM', 
-       x = 'Highest Probability of Cluster Assignment', 
-       y = 'Number of Observations') + 
-  theme_minimal()
-```
-
-```{r viz-pca-dims-by-clusters}
-duodata_pca_gmm |> 
-  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
-  ggplot(aes(x = pca_dim1, 
-             y = pca_dim2)) + 
-  geom_point(aes(color = gmm_cluster)) + 
-  geom_vline(xintercept = 0) + 
-  geom_hline(yintercept = 0) + 
-  labs(title = 'Duolingo User Clusters by PCA Dimension', 
-       subtitle = 'Front View', 
-       x = 'PCA Dimension 1 - Accuracy', 
-       y = 'PCA Dimension 2 - Time Investment') + 
-  theme_minimal() +
-  theme(legend.position = 'bottom') 
-
-duodata_pca_gmm |> 
-  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
-  ggplot(aes(x = pca_dim1, 
-             y = pca_dim3)) + 
-  geom_point(aes(color = gmm_cluster)) + 
-  geom_vline(xintercept = 0) + 
-  geom_hline(yintercept = 0) + 
-  labs(title = 'Duolingo User Clusters by PCA Dimension',
-       subtitle = 'Bottom View', 
-       x = 'PCA Dimension 1 - Accuracy', 
-       y = 'PCA Dimension 3 - Rushedness') + 
-  theme_minimal() +
-  theme(legend.position = 'bottom')
-
-duodata_pca_gmm |> 
-  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
-  ggplot(aes(x = pca_dim3, 
-             y = pca_dim2)) + 
-  geom_point(aes(color = gmm_cluster)) + 
-  geom_vline(xintercept = 0) + 
-  geom_hline(yintercept = 0) + 
-  labs(title = 'Duolingo User Clusters by PCA Dimension', 
-       subtitle = 'Side View', 
-       x = 'PCA Dimension 3 - Rushedness', 
-       y = 'PCA Dimension 2 - Time Investment') + 
-  theme_minimal() +
-  theme(legend.position = 'bottom')
-```
-
-```{r pca-3d}
-mycolors <- c('red', 'gold', 'forestgreen', 'royalblue3', 'skyblue3', 'purple', 'hotpink') 
-duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
-
-#Plot the 3rd PCA dimension, with labels (little harder to read)
-plot3d(x = duodata_pca_gmm$pca_dim1, 
-       y = duodata_pca_gmm$pca_dim2, 
-       z = duodata_pca_gmm$pca_dim3,
-       col = duodata_pca_gmm$color, 
-       #type = 's', 
-       #radius = .15, 
-       xlab = 'PCA Dim 1', 
-       ylab = 'PCA Dim 2', 
-       zlab = 'PCA Dim 3', 
-       box = FALSE)
-```
-
-```{r examine-var-importance}
-#PCA Variable Averages
-cluster_averages <- duodata_pca_gmm |>
-  dplyr::select(gmm_cluster, starts_with("pca_dim")) |> 
-  group_by(gmm_cluster) |>
-  summarize(across(where(is.numeric), mean)) |>
-  ungroup() |>
-  pivot_longer(-gmm_cluster, 
-               names_to = "engagement_metrics", 
-               values_to = "value") 
-
-ggplot(cluster_averages, 
-       aes(x = engagement_metrics, 
-           y = value, 
-           fill = value > 0)) + 
-  geom_col() +
-  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
-  geom_text(aes(label = round(value, 2)), 
-            position = position_dodge(width = 0.9), 
-            hjust = -0.2, vjust = 0.5) +
-  coord_flip() +
-  facet_wrap(~ gmm_cluster) +
-  labs(x = "Engagement Metric", 
-       y = "Value", 
-       title = "Engagement Metrics by Cluster") +
-  theme(legend.position = "none")
-
-
-
-#Non-PCA Variables Average
-cluster_averages <- duodata_pca_gmm |>
-  dplyr::select(-starts_with("pca_dim")) |>
-  group_by(gmm_cluster) |>
-  summarize(across(where(is.numeric), mean)) |>
-  ungroup() |>
-  pivot_longer(-gmm_cluster, 
-               names_to = "engagement_metrics", 
-               values_to = "value")
-
-ggplot(cluster_averages, aes(x = engagement_metrics, 
-                             y = value, 
-                             fill = value > 0)) + 
-  geom_col() +
-  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
-  geom_text(aes(label = round(value, 2)), 
-            position = position_dodge(width = 0.9), 
-            hjust = -0.2, vjust = 0.5) +
-  coord_flip() +
-  facet_grid(~ gmm_cluster) +
   labs(x = "Engagement Metric", 
        y = "Value", 
        title = "Engagement Metrics by Cluster") +
@@ -1011,6 +854,9 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
 # Build Predictive Model - HC
 
 ```{r split-data}
+#Removing Cluster Color Variable from the 3D plot (proxying as the cluster)
+duodata <- dplyr::select(duodata, -color)
+
 #NOTE: Data already standardized
 set.seed(1234) 
 train <- sample_frac(duodata, 0.8) 
@@ -1244,9 +1090,173 @@ fig <- fig |> layout(scene = list(xaxis = list(title = 'Dim 3 - Rushed-ness'),
 fig
 ```
 
+## GMM
+
+```{r build-gmms}
+#Build GMM with PCA
+set.seed(1234)
+gmm_pca <- Mclust(data = dplyr::select(duodata_pca,
+                                       starts_with("pca_dim")))
+summary(gmm_pca) 
+```
+
+```{r assign-clusters}
+#Attach clusters to data
+gmm_preds <- predict(gmm_pca) 
+duodata_pca_gmm <- bind_cols(duodata_pca, gmm_preds$classification) 
+
+#Rename gmm_cluster column
+duodata_pca_gmm <- duodata_pca_gmm |> 
+  rename(gmm_cluster = ...31) 
+```
+
+```{r}
+plot(gmm_1, what = 'uncertainty')
+
+max_probs <- tibble(max_prob = double())
+
+for (n in 1:length(duodata_pca_gmm$user)){
+  max_probs <- bind_rows(max_probs, 
+                         tibble(max_prob = max(gmm_preds$z[n,])))
+}  
+
+duodata_pca_gmm$max_prob <- max_probs$max_prob
+
+duodata_pca_gmm |> dplyr::select(user, max_prob) |> 
+  ggplot(aes(x = max_prob)) + 
+  geom_histogram(fill = '#2952A3') + 
+  labs(title = 'Spread of Max Probabilities from GMM', 
+       x = 'Highest Probability of Cluster Assignment', 
+       y = 'Number of Observations') + 
+  theme_minimal()
+```
+
+```{r viz-pca-dims-by-clusters}
+duodata_pca_gmm |> 
+  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
+  ggplot(aes(x = pca_dim1, 
+             y = pca_dim2)) + 
+  geom_point(aes(color = gmm_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension', 
+       subtitle = 'Front View', 
+       x = 'PCA Dimension 1 - Accuracy', 
+       y = 'PCA Dimension 2 - Time Investment') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom') 
+
+duodata_pca_gmm |> 
+  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
+  ggplot(aes(x = pca_dim1, 
+             y = pca_dim3)) + 
+  geom_point(aes(color = gmm_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension',
+       subtitle = 'Bottom View', 
+       x = 'PCA Dimension 1 - Accuracy', 
+       y = 'PCA Dimension 3 - Rushedness') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+
+duodata_pca_gmm |> 
+  mutate(gmm_cluster = as.factor(gmm_cluster)) |> 
+  ggplot(aes(x = pca_dim3, 
+             y = pca_dim2)) + 
+  geom_point(aes(color = gmm_cluster)) + 
+  geom_vline(xintercept = 0) + 
+  geom_hline(yintercept = 0) + 
+  labs(title = 'Duolingo User Clusters by PCA Dimension', 
+       subtitle = 'Side View', 
+       x = 'PCA Dimension 3 - Rushedness', 
+       y = 'PCA Dimension 2 - Time Investment') + 
+  theme_minimal() +
+  theme(legend.position = 'bottom')
+```
+
+```{r pca-3d}
+mycolors <- c('red', 'gold', 'forestgreen', 'royalblue3', 'skyblue3', 'purple', 'hotpink') 
+duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
+
+#Plot the 3rd PCA dimension, with labels (little harder to read)
+plot3d(x = duodata_pca_gmm$pca_dim1, 
+       y = duodata_pca_gmm$pca_dim2, 
+       z = duodata_pca_gmm$pca_dim3,
+       col = duodata_pca_gmm$color, 
+       #type = 's', 
+       #radius = .15, 
+       xlab = 'PCA Dim 1', 
+       ylab = 'PCA Dim 2', 
+       zlab = 'PCA Dim 3', 
+       box = FALSE)
+```
+
+```{r examine-var-importance}
+#PCA Variable Averages
+cluster_averages <- duodata_pca_gmm |>
+  dplyr::select(gmm_cluster, starts_with("pca_dim")) |> 
+  group_by(gmm_cluster) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-gmm_cluster, 
+               names_to = "engagement_metrics", 
+               values_to = "value") 
+
+cluster_averages |> 
+  mutate(engagement_metrics = case_when(engagement_metrics == "pca_dim1" ~ "1.Accuracy",
+                               engagement_metrics == "pca_dim2" ~ '2.Investment', 
+                               engagement_metrics == "pca_dim3" ~ '3.Rushedness', 
+                               engagement_metrics == "pca_dim4" ~ '4.Burnout')) |>
+ggplot(aes(x = engagement_metrics, 
+           y = value, 
+           fill = value > 0)) + 
+  geom_col() +
+  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
+  geom_text(aes(label = round(value, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_wrap(~ gmm_cluster) +
+  labs(x = "Engagement Metric", 
+       y = "Value", 
+       title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none")
+
+
+
+#Non-PCA Variables Average
+cluster_averages <- duodata_pca_gmm |>
+  dplyr::select(-starts_with("pca_dim")) |>
+  group_by(gmm_cluster) |>
+  summarize(across(where(is.numeric), mean)) |>
+  ungroup() |>
+  pivot_longer(-gmm_cluster, 
+               names_to = "engagement_metrics", 
+               values_to = "value")
+
+ggplot(cluster_averages, aes(x = engagement_metrics, 
+                             y = value, 
+                             fill = value > 0)) + 
+  geom_col() +
+  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
+  geom_text(aes(label = round(value, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.2, vjust = 0.5) +
+  coord_flip() +
+  facet_grid(~ gmm_cluster) +
+  labs(x = "Engagement Metric", 
+       y = "Value", 
+       title = "Engagement Metrics by Cluster") +
+  theme(legend.position = "none")
+```
+
 # Build Predictive Model - GMM
 
 ```{r split-data}
+#Remove color variable from 3D plot
+duodata_pca_gmm <- dplyr::select(duodata_pca_gmm, -color)
+
 #NOTE: Data already standardized
 set.seed(1234) 
 train <- sample_frac(duodata_pca_gmm, 0.8) 
@@ -1346,11 +1356,11 @@ rmse_results <- bind_rows(rmse_results,
 
 ```{r model-results}
 #saved_result <- rmse_results
-rmse_results <- saved_result 
+#rmse_results <- saved_result 
 rmse_results <- rmse_results |> 
   mutate(samp = case_when(samp == 'train_samp1' ~ "No Groupings", 
                           samp == 'train_samp_pca' ~ "PCA Dimensions", 
-                          samp == 'train_samp_clust' ~ "HC Clusters", 
+                          samp == 'train_samp_clust' ~ "GMM Clusters", 
                           samp == 'train_samp_both' ~ "Both Dimension Reductions"), 
          min_rmse = 1 - min_rmse, 
          samp = as.factor(samp)) 
@@ -1435,7 +1445,7 @@ varImp(m_boost_rf_both)$importance |>
                              rowname == 'pca_dim2' ~ 'Investment', 
                              rowname == 'pca_dim3' ~ 'Rushed-ness', 
                              rowname == 'pca_dim4' ~ 'Burnout', 
-                             rowname == 'hc_cluster' ~ 'Cluster')) |> 
+                             rowname == 'gmm_cluster' ~ 'Cluster')) |> 
   ggplot(aes(x = forcats::fct_reorder(rowname, Overall), 
              y = Overall)) +
   geom_col(aes(fill = factor(rowname, 
@@ -1449,8 +1459,12 @@ varImp(m_boost_rf_both)$importance |>
   theme_minimal() +
   theme(legend.position = 'none')
 
+#NEED 6 MORE COLORS HERE 
+
 mycolors <- c('red', 'green', 'blue')
-duodata$color <- mycolors[ as.numeric(duodata$hc_cluster) ]
+
+
+duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
 
 #Plot the 3rd PCA dimension, with labels (little harder to read)
 plot3d(x = duodata$pca_dim3, 
@@ -1466,11 +1480,11 @@ plot3d(x = duodata$pca_dim3,
 ```
 
 ```{r plotly}
-fig <- plot_ly(duodata, 
+fig <- plot_ly(duodata_pca_gmm, 
                x = ~pca_dim3, 
                y = ~pca_dim1, 
                z = ~pca_dim2, 
-               color = ~as.factor(hc_cluster), 
+               color = ~as.factor(gmm_cluster), 
                size = ~drop_day)
 fig <- fig |> add_markers()
 fig <- fig |> layout(scene = list(xaxis = list(title = 'Dim 3 - Rushed-ness'),
