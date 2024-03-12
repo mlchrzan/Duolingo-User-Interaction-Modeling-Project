@@ -596,9 +596,9 @@ miss_var_summary(duodata)
 duodata |> 
   ggplot(aes(x = drop_day)) + 
   geom_histogram(fill = "#7ac70c") + 
-  labs(title = 'User Retention Over Time',
+  labs(title = 'User Churn Over Time',
        subtitle = 'Number of Users Returning to Duolingo Each Day Decreases Over Time', 
-       x = 'Days', 
+       x = 'Number of Days a User Lasts', 
        y = 'Number of Users Lost') +
   theme_minimal()
 
@@ -710,7 +710,9 @@ duodata <- duodata |>
 ## Hierarchical
 
 ```{r hierarchical}
-duo_diff <- dist(duodata, method = "euclidean")
+duo_diff <- dist(dplyr::select(duodata, 
+                               -user, 
+                               -starts_with("pca_dim")), method = "euclidean")
 duo_hc_c <- hclust(duo_diff, method = "ward.D")
 
 duo_dend <- as.dendrogram(duo_hc_c)|> 
@@ -739,8 +741,8 @@ duodata |>
   geom_hline(yintercept = 0) + 
   labs(title = 'Duolingo User Clusters by PCA Dimension', 
        subtitle = 'Front View', 
-       x = 'PCA Dimension 1', 
-       y = 'PCA Dimension 2') + 
+       x = 'PCA Dimension 1 - Accuracy', 
+       y = 'PCA Dimension 2 - Time Investment') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
 
@@ -753,8 +755,8 @@ duodata |>
   geom_hline(yintercept = 0) + 
   labs(title = 'Duolingo User Clusters by PCA Dimension',
        subtitle = 'Bottom View', 
-       x = 'PCA Dimension 1', 
-       y = 'PCA Dimension 3') + 
+       x = 'PCA Dimension 1 - Accuracy', 
+       y = 'PCA Dimension 3 - Rushedness') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
 
@@ -767,8 +769,8 @@ duodata |>
   geom_hline(yintercept = 0) + 
   labs(title = 'Duolingo User Clusters by PCA Dimension', 
        subtitle = 'Side View', 
-       x = 'PCA Dimension 3', 
-       y = 'PCA Dimension 2') + 
+       x = 'PCA Dimension 3 -Rushedness', 
+       y = 'PCA Dimension 2 - Time Investment') + 
   theme_minimal() +
   theme(legend.position = 'bottom') 
 ```
@@ -808,8 +810,9 @@ cluster_averages |>
                                engagement_metrics == "pca_dim4" ~ '4.Burnout')) |> 
 ggplot(aes(x = engagement_metrics, 
            y = value, 
-           fill = as.factor(hc_cluster))) + 
+           fill = value > 0)) + 
   geom_col() + 
+  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
             hjust = -0.2, vjust = 0.5) +
@@ -834,8 +837,9 @@ cluster_averages <- duodata |>
 
 ggplot(cluster_averages, aes(x = engagement_metrics, 
                              y = value, 
-                             fill = as.factor(hc_cluster))) + 
+                             fill = value > 0)) + 
   geom_col() +
+  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
             hjust = -0.2, vjust = 0.5) +
