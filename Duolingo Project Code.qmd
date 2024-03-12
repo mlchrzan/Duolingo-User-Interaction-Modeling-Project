@@ -965,8 +965,9 @@ cluster_averages <- duodata_pca_gmm |>
 ggplot(cluster_averages, 
        aes(x = engagement_metrics, 
            y = value, 
-           fill = as.factor(gmm_cluster))) + 
+           fill = value > 0)) + 
   geom_col() +
+  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
             hjust = -0.2, vjust = 0.5) +
@@ -991,8 +992,9 @@ cluster_averages <- duodata_pca_gmm |>
 
 ggplot(cluster_averages, aes(x = engagement_metrics, 
                              y = value, 
-                             fill = as.factor(gmm_cluster))) + 
+                             fill = value > 0)) + 
   geom_col() +
+  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
   geom_text(aes(label = round(value, 2)), 
             position = position_dodge(width = 0.9), 
             hjust = -0.2, vjust = 0.5) +
