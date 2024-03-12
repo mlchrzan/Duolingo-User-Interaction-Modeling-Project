@@ -855,6 +855,7 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
 
 ```{r build-gmms}
 #Build GMM with PCA
+set.seed(1234)
 gmm_pca <- Mclust(data = dplyr::select(duodata_pca, starts_with("pca_dim")))
 summary(gmm_pca) 
 ```
@@ -900,8 +901,8 @@ duodata_pca_gmm |>
   geom_hline(yintercept = 0) + 
   labs(title = 'Duolingo User Clusters by PCA Dimension', 
        subtitle = 'Front View', 
-       x = 'PCA Dimension 1', 
-       y = 'PCA Dimension 2') + 
+       x = 'PCA Dimension 1 - Accuracy', 
+       y = 'PCA Dimension 2 - Time Investment') + 
   theme_minimal() +
   theme(legend.position = 'bottom') 
 
@@ -914,8 +915,8 @@ duodata_pca_gmm |>
   geom_hline(yintercept = 0) + 
   labs(title = 'Duolingo User Clusters by PCA Dimension',
        subtitle = 'Bottom View', 
-       x = 'PCA Dimension 1', 
-       y = 'PCA Dimension 3') + 
+       x = 'PCA Dimension 1 - Accuracy', 
+       y = 'PCA Dimension 3 - Rushedness') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
 
@@ -928,8 +929,8 @@ duodata_pca_gmm |>
   geom_hline(yintercept = 0) + 
   labs(title = 'Duolingo User Clusters by PCA Dimension', 
        subtitle = 'Side View', 
-       x = 'PCA Dimension 1', 
-       y = 'PCA Dimension 3') + 
+       x = 'PCA Dimension 3 - Rushedness', 
+       y = 'PCA Dimension 2 - Time Investment') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
 ```
