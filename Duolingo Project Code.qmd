@@ -937,6 +937,7 @@ results <- bind_rows(results,
                                by = join_by(nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample))))
 
 saved_result <- results
+results <- saved_result
 ```
 
 ```{r}
@@ -947,7 +948,7 @@ results <- results |>
                           samp == 'train_samp_clust' ~ "HC Clusters", 
                           samp == 'train_samp_both' ~ "Both Reductions"), 
          min_rmse = 1 - RMSE, 
-         unstand_RMSE = RMSE*response_sd,
+         unstand_RMSE = RMSE*response_sd + response_mean,
          samp = as.factor(samp)) 
 ```
 
@@ -978,8 +979,8 @@ results |>
   ggplot(aes(x = forcats::fct_reorder(samp, min_rmse), 
              y = min_rmse)) + 
   geom_col() + 
-  geom_col(data = rmse_results |> filter(samp %in% c("PCA Dimensions", 
-                                                     "Both Dimension Reductions")), 
+  geom_col(data = results |> filter(samp %in% c("PCA Dimensions", 
+                                                     "Both Reductions")), 
            fill = "#7ac70c") + 
   geom_text(aes(label = round(min_rmse, 4)), 
             position = position_dodge(width = 0.9), 
