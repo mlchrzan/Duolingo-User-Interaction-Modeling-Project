@@ -588,10 +588,11 @@ miss_var_summary(duodata)
 duodata |> 
   ggplot(aes(x = drop_day)) + 
   geom_histogram(col = 'white',
-                 fill = "#7ac70c") + 
+                 fill = "#7ac70c", 
+                 binwidth = 1) + 
   labs(title = 'User Churn Over Time',
        subtitle = 'Number of Users Returning to Duolingo Each Day Decreases Over Time', 
-       x = 'Number of Days a User Lasts', 
+       x = "User's Last Day", 
        y = 'Number of Users Lost') +
   theme_minimal()
 
@@ -662,13 +663,14 @@ t(var$coord) |>
            dimension == "Dim.3" |
            dimension == "Dim.4") |> 
   # mutate(dimension = case_when(dimension == "Dim.1" ~ "1.Accuracy",
-  #                              dimension == "Dim.2" ~ '2.Investment', 
-  #                              dimension == "Dim.3" ~ '3.Rushedness', 
-  #                              dimension == "Dim.4" ~ '4.Burnout')) |> 
+  #                              dimension == "Dim.2" ~ '2.Investment',
+  #                              dimension == "Dim.3" ~ '3.Rushedness',
+  #                              dimension == "Dim.4" ~ '4.Burnout')) |>
   ggplot() +
   geom_col(aes(y = value,
                x = variable, 
                fill = value > 0)) +
+  scale_fill_manual(values = c('yellow3', "#7ac70c")) +
   facet_wrap(~ dimension,
              scales = "free_y") +
   scale_x_reordered() + 
@@ -784,7 +786,7 @@ ggplot(aes(x = engagement_metrics,
            y = value, 
            fill = value > 0)) + 
   geom_col() + 
-  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
+  scale_fill_manual(values = c('yellow3', "#7ac70c")) +
   #geom_text(aes(label = round(value, 2)), 
   #          position = position_dodge(width = 0.9), 
   #          hjust = -0.2, vjust = 0.5) +
@@ -792,7 +794,8 @@ ggplot(aes(x = engagement_metrics,
   facet_wrap(~ hc_cluster) +
   labs(x = "Engagement Metric", 
        y = "Value", 
-       title = "Engagement Metrics by Cluster") +
+       title = "Engagement Metrics by Cluster", 
+       subtitle = 'Examining Defining Characteristics of Each Cluster') +
   theme(legend.position = "none") 
 
 
@@ -811,7 +814,7 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
                              y = value, 
                              fill = value > 0)) + 
   geom_col() +
-  scale_fill_manual(values = c('darkgrey', "#7ac70c")) +
+  scale_fill_manual(values = c('yellow3', "#7ac70c")) +
   #geom_text(aes(label = round(value, 2)), 
   #          position = position_dodge(width = 0.9), 
   #          hjust = -0.2, vjust = 0.5) +
@@ -819,16 +822,14 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
   facet_grid(~ hc_cluster) +
   labs(x = "Engagement Metric", 
        y = "Value", 
-       title = "Engagement Metrics by Cluster") +
+       title = "Engagement Metrics by Cluster", 
+       subtitle = 'Examining Defining Characteristics by Variable') +
   theme(legend.position = "none")
 ```
 
 # Build Predictive Model - HC
 
 ```{r split-data}
-#Removing Cluster Color Variable from the 3D plot (proxying as the cluster)
-duodata <- dplyr::select(duodata, -color)
-
 #NOTE: Data already standardized
 set.seed(1234) 
 train <- sample_frac(duodata, 0.8) 
@@ -869,8 +870,8 @@ test_samp_both <- test |> dplyr::select(drop_day,
 trControl = trainControl(method = "cv",
                          number = 10)
 
-rmse_results <- tibble(samp = character(), 
-                       min_rmse = double())
+results <- tibble()
+
 
 #First
 set.seed(1234)
@@ -881,9 +882,12 @@ m_boost_rf_1 <- train(drop_day ~ .,
                     verbose = FALSE, 
                     verbosity = 0)
 
-rmse_results <- bind_rows(rmse_results, 
-                          tibble(samp = 'train_samp1', 
-                                 min_rmse = min(m_boost_rf_1$resample$RMSE)))
+results <- bind_rows(results, 
+                     tibble(samp = 'train_samp1',
+                     left_join(m_boost_rf_1$finalModel$tuneValue, 
+                               m_boost_rf_1$results, 
+                               by = join_by(nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample))))
+
 
 #Second
 set.seed(1234)
@@ -894,9 +898,12 @@ m_boost_rf_pca <- train(drop_day ~ .,
                     verbose = FALSE, 
                     verbosity = 0) 
 
-rmse_results <- bind_rows(rmse_results, 
-                          tibble(samp = 'train_samp_pca', 
-                                 min_rmse = min(m_boost_rf_pca$resample$RMSE)))
+results <- bind_rows(results, 
+                     tibble(samp = 'train_samp_pca',
+                     left_join(m_boost_rf_pca$finalModel$tuneValue, 
+                               m_boost_rf_pca$results, 
+                               by = join_by(nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample))))
+
 
 #Third
 set.seed(1234)
@@ -907,9 +914,11 @@ m_boost_rf_hc <- train(drop_day ~ .,
                     verbose = FALSE, 
                     verbosity = 0)
 
-rmse_results <- bind_rows(rmse_results, 
-                          tibble(samp = 'train_samp_clust', 
-                                 min_rmse = min(m_boost_rf_hc$resample$RMSE)))
+results <- bind_rows(results, 
+                     tibble(samp = 'train_samp_clust',
+                     left_join(m_boost_rf_hc$finalModel$tuneValue, 
+                               m_boost_rf_hc$results, 
+                               by = join_by(nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample))))
 
 
 #Fourth
@@ -921,23 +930,35 @@ m_boost_rf_both <- train(drop_day ~ .,
                     verbose = FALSE, 
                     verbosity = 0)
 
-rmse_results <- bind_rows(rmse_results, 
-                          tibble(samp = 'train_samp_both', 
-                                 min_rmse = min(m_boost_rf_both$resample$RMSE)))
+results <- bind_rows(results, 
+                     tibble(samp = 'train_samp_both',
+                     left_join(m_boost_rf_both$finalModel$tuneValue, 
+                               m_boost_rf_both$results, 
+                               by = join_by(nrounds, max_depth, eta, gamma, colsample_bytree, min_child_weight, subsample))))
+
+saved_result <- results
 ```
 
-```{r model-results}
-#saved_result <- rmse_results
-rmse_results <- saved_result 
-rmse_results <- rmse_results |> 
-  mutate(samp = case_when(samp == 'train_samp1' ~ "No Groupings", 
+```{r}
+#Edits for Visualization
+results <- results |> 
+  mutate(samp = case_when(samp == 'train_samp1' ~ "Raw Data", 
                           samp == 'train_samp_pca' ~ "PCA Dimensions", 
                           samp == 'train_samp_clust' ~ "HC Clusters", 
-                          samp == 'train_samp_both' ~ "Both Dimension Reductions"), 
-         min_rmse = 1 - min_rmse, 
+                          samp == 'train_samp_both' ~ "Both Reductions"), 
+         min_rmse = 1 - RMSE, 
+         unstand_RMSE = RMSE*response_sd,
          samp = as.factor(samp)) 
+```
 
-rmse_results |> 
+```{r model-results-table}
+results |> 
+  dplyr::select(samp, unstand_RMSE, RMSE, Rsquared) |> 
+  arrange(RMSE)
+```
+
+```{r model-results-viz}
+results |> 
   ggplot(aes(x = forcats::fct_reorder(samp, min_rmse), 
              y = min_rmse, 
              fill = samp)) + 
@@ -947,13 +968,13 @@ rmse_results |>
             vjust = 0) + 
   labs(title = "XGBoost Model Performance on Different Samples", 
        subtitle = 'Model Performance Given as 1-Standardized_RMSE', 
-       x = 'Sample', 
+       x = 'Model Sample', 
        y = '1 - RMSE') +
   theme_minimal() +
   theme(legend.position = 'none') 
 
 
-rmse_results |> 
+results |> 
   ggplot(aes(x = forcats::fct_reorder(samp, min_rmse), 
              y = min_rmse)) + 
   geom_col() + 
@@ -965,7 +986,7 @@ rmse_results |>
             vjust = 0) + 
   labs(title = "XG Boost Model Performance on Different Samples", 
        subtitle = 'Model Performance Given as 1-Standardized_RMSE', 
-       x = 'Sample', 
+       x = 'Model Sample', 
        y = '1 - RMSE') +
   theme_minimal() +
   theme(legend.position = 'none') 
@@ -997,29 +1018,25 @@ test_predictions <- tibble(predicted_drop = predicted_drop_test_rf,
 
 all_predictions <- bind_rows(train_predictions, test_predictions)
 
-ggplot(all_predictions, 
-       aes(x = drop,
-           y = predicted_drop, 
-           color = source)) +
-  geom_point() +
-  geom_abline(aes(intercept = 0, 
-                  slope = 1), 
-              lty = 2) +
-  theme_bw()
-```
-
-```{r unstandardize-predictions}
+#Graph Test v Train, UNstandardized
 all_predictions |> 
   mutate(predicted_drop = predicted_drop*response_sd + response_mean, 
          drop = drop*response_sd + response_mean) |> 
   ggplot(aes(x = drop,
            y = predicted_drop, 
            color = source)) +
+  scale_color_manual(values = c("#7ac70c", 'yellow3')) +
   geom_point() +
   geom_abline(aes(intercept = 0, 
                   slope = 1), 
               lty = 2) +
-  theme_bw()
+  theme_minimal() + 
+  theme(legend.position = 'bottom') +
+  labs(title = 'Analyzing Prediction Accuracy', 
+       subtitle = 'Actual v Predicted Drop Day for Training and Testing Data', 
+       x = 'Actual Drop Day', 
+       y = 'Predicted Drop Day', 
+       color = 'Dataset')
 ```
 
 ```{r importance-viz}
@@ -1095,7 +1112,8 @@ duodata_pca_gmm$max_prob <- max_probs$max_prob
 
 duodata_pca_gmm |> dplyr::select(user, max_prob) |> 
   ggplot(aes(x = max_prob)) + 
-  geom_histogram(fill = '#2952A3') + 
+  geom_histogram(col = 'white', 
+                 fill = '#2952A3') + 
   labs(title = 'Spread of Max Probabilities from GMM', 
        x = 'Highest Probability of Cluster Assignment', 
        y = 'Number of Observations') + 
