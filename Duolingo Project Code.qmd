@@ -5,14 +5,6 @@ format: html
 editor: visual
 ---
 
-# Introduction
-
-...
-
-# Research Questions
-
-...
-
 # Setup
 
 ## Libraries
@@ -595,22 +587,14 @@ miss_var_summary(duodata)
 ```{r data-viz-for-stories}
 duodata |> 
   ggplot(aes(x = drop_day)) + 
-  geom_histogram(fill = "#7ac70c") + 
+  geom_histogram(col = 'white',
+                 fill = "#7ac70c") + 
   labs(title = 'User Churn Over Time',
        subtitle = 'Number of Users Returning to Duolingo Each Day Decreases Over Time', 
        x = 'Number of Days a User Lasts', 
        y = 'Number of Users Lost') +
   theme_minimal()
 
-# duodata |> 
-#   ggplot(aes(x = avg_days)) + 
-#   geom_histogram(fill = "#7ac70c") + 
-#   labs(title = 'Users Average Number of Days',
-#        subtitle = 'As time progresses, less and less users return to the app', 
-#        x = 'Days', 
-#        y = 'Number of Users') +
-#   scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
-#   theme_minimal() 
 
 duodata |> 
   #filter(days_skipped_user > 0) |> 
@@ -622,6 +606,11 @@ duodata |>
        y = 'Number of Users') +
   scale_y_continuous(labels = ~ format(.x, scientific = FALSE)) +
   theme_minimal() 
+```
+
+```{r get-response-mean-sd}
+response_mean <- mean(duodata$drop_day)
+response_sd <- sd(duodata$drop_day)
 ```
 
 # Dimension Reduction
@@ -773,23 +762,6 @@ duodata |>
        y = 'PCA Dimension 2 - Time Investment') + 
   theme_minimal() +
   theme(legend.position = 'bottom') 
-```
-
-```{r pca-3d}
-mycolors <- c('red', 'green', 'blue')
-duodata$color <- mycolors[ as.numeric(duodata$hc_cluster) ]
-
-#Plot the 3rd PCA dimension, with labels (little harder to read)
-plot3d(x = duodata$pca_dim1, 
-       y = duodata$pca_dim2, 
-       z = duodata$pca_dim3,
-       col = duodata$color, 
-       type = 's', 
-       radius = .5, 
-       xlab = 'PCA Dim 1', 
-       ylab = 'PCA Dim 2', 
-       zlab = 'PCA Dim 3', 
-       box = FALSE) 
 ```
 
 ```{r examine-var-importance}
@@ -999,7 +971,7 @@ rmse_results |>
   theme(legend.position = 'none') 
 ```
 
-```{r info-boost-rf}
+```{r info-xgboostz}
 plot(m_boost_rf_1)
 plot(m_boost_rf_pca)
 plot(m_boost_rf_hc)
@@ -1011,7 +983,7 @@ varImp(m_boost_rf_pca)
 varImp(m_boost_rf_both)
 ```
 
-```{r predict-rf}
+```{r predict-xgboost}
 predicted_drop_train_rf <- predict(m_boost_rf_both, train)
 predicted_drop_test_rf <- predict(m_boost_rf_both, test)
 
@@ -1036,7 +1008,21 @@ ggplot(all_predictions,
   theme_bw()
 ```
 
-```{r}
+```{r unstandardize-predictions}
+all_predictions |> 
+  mutate(predicted_drop = predicted_drop*response_sd + response_mean, 
+         drop = drop*response_sd + response_mean) |> 
+  ggplot(aes(x = drop,
+           y = predicted_drop, 
+           color = source)) +
+  geom_point() +
+  geom_abline(aes(intercept = 0, 
+                  slope = 1), 
+              lty = 2) +
+  theme_bw()
+```
+
+```{r importance-viz}
 varImp(m_boost_rf_both)$importance |> 
   as.data.frame() |> 
   rownames_to_column() |> 
@@ -1058,21 +1044,6 @@ varImp(m_boost_rf_both)$importance |>
        y = 'Overall Importance') +
   theme_minimal() +
   theme(legend.position = 'none')
-
-mycolors <- c('red', 'green', 'blue')
-duodata$color <- mycolors[ as.numeric(duodata$hc_cluster) ]
-
-#Plot the 3rd PCA dimension, with labels (little harder to read)
-plot3d(x = duodata$pca_dim3, 
-       y = duodata$pca_dim4, 
-       z = duodata$pca_dim2,
-       col = duodata$color, 
-       type = 's', 
-       radius = .5, 
-       xlab = 'PCA Dim 3', 
-       ylab = 'PCA Dim 4', 
-       zlab = 'PCA Dim 2', 
-       box = FALSE) 
 ```
 
 ```{r plotly}
@@ -1090,7 +1061,7 @@ fig <- fig |> layout(scene = list(xaxis = list(title = 'Dim 3 - Rushed-ness'),
 fig
 ```
 
-## GMM
+## Create Clusters - GMM
 
 ```{r build-gmms}
 #Build GMM with PCA
@@ -1173,23 +1144,6 @@ duodata_pca_gmm |>
        y = 'PCA Dimension 2 - Time Investment') + 
   theme_minimal() +
   theme(legend.position = 'bottom')
-```
-
-```{r pca-3d}
-mycolors <- c('red', 'gold', 'forestgreen', 'royalblue3', 'skyblue3', 'purple', 'hotpink') 
-duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
-
-#Plot the 3rd PCA dimension, with labels (little harder to read)
-plot3d(x = duodata_pca_gmm$pca_dim1, 
-       y = duodata_pca_gmm$pca_dim2, 
-       z = duodata_pca_gmm$pca_dim3,
-       col = duodata_pca_gmm$color, 
-       #type = 's', 
-       #radius = .15, 
-       xlab = 'PCA Dim 1', 
-       ylab = 'PCA Dim 2', 
-       zlab = 'PCA Dim 3', 
-       box = FALSE)
 ```
 
 ```{r examine-var-importance}
@@ -1458,25 +1412,6 @@ varImp(m_boost_rf_both)$importance |>
        y = 'Overall Importance') +
   theme_minimal() +
   theme(legend.position = 'none')
-
-#NEED 6 MORE COLORS HERE 
-
-mycolors <- c('red', 'green', 'blue')
-
-
-duodata_pca_gmm$color <- mycolors[ as.numeric(duodata_pca_gmm$gmm_cluster) ]
-
-#Plot the 3rd PCA dimension, with labels (little harder to read)
-plot3d(x = duodata$pca_dim3, 
-       y = duodata$pca_dim4, 
-       z = duodata$pca_dim2,
-       col = duodata$color, 
-       type = 's', 
-       radius = .5, 
-       xlab = 'PCA Dim 3', 
-       ylab = 'PCA Dim 4', 
-       zlab = 'PCA Dim 2', 
-       box = FALSE) 
 ```
 
 ```{r plotly}
