@@ -9,8 +9,6 @@ editor: visual
 
 ## Libraries
 
-Which libraries will we use and why?
-
 ```{r libraries}
 library(tidyverse)
 library(skimr)
@@ -32,6 +30,8 @@ library(ggrepel)
 library(tidytext)
 library(rgl)
 library(plotly)
+library(ModelMetrics)
+library(Metrics)
 ```
 
 ## Import Data
@@ -77,7 +77,7 @@ gg_miss_upset(duosample_mis)
 ```
 
 ```{r examine-mis-prompt}
-#Examining Missiningness Related to Prompt and Time with Other Variables #Is all the missing prompt data in format? Appears so (NOTE, not the sample now, full dataset) 
+#Examining Missiningness Related to Prompt and Time with Other Variables 
 #Prompt 
 duodata |> 
   dplyr::select(prompt, format, session, client) |> 
@@ -94,7 +94,6 @@ duodata |>
 ```
 
 ```{r examine-session-format-distribution}
-
 duodata |> 
   group_by(session, format) |> 
   summarize(n = n())
@@ -155,7 +154,6 @@ duodata |>
   mutate(avg_time = mean(time)) |> 
   dplyr::select(user, avg_time, time) |> 
   arrange(desc(time))
-      #QTNA: Why don't some users have an avg_time but have time? #Number of Users with ONLY        less than 1 day, 52 - resulting in ~30000 rows 
 
   #This shows that 60 users used the app for longer than 14 hours in one session
 duodata |> 
@@ -181,8 +179,7 @@ one_days <- duodata |>
   filter(max_days < 1) 
 
 n_distinct(one_days$user) 
-#Curious if there's any patterns in how these folks use it rather than others. 
-#Michael noticed from the histogram that users trail off as days increases.
+
 
 #Proportion of Correct Responses, 14.62% 
 sum(duodata$label == 1)/sum(duodata$label == 0)
@@ -610,6 +607,7 @@ duodata |>
 ```
 
 ```{r get-response-mean-sd}
+#Saving to unstandardize the results later
 response_mean <- mean(duodata$drop_day)
 response_sd <- sd(duodata$drop_day)
 ```
@@ -952,10 +950,102 @@ results <- results |>
          samp = as.factor(samp)) 
 ```
 
-```{r model-results-table}
+```{r metrics-table-model}
 results |> 
   dplyr::select(samp, unstand_RMSE, RMSE, Rsquared) |> 
   arrange(RMSE)
+```
+
+```{r rmse-table-predictions}
+predicted_drop_train_1 <- predict(m_boost_rf_1, train)
+predicted_drop_test_1 <- predict(m_boost_rf_1, test)
+
+predicted_drop_train_pca <- predict(m_boost_rf_pca, train)
+predicted_drop_test_pca <- predict(m_boost_rf_pca, test)
+
+predicted_drop_train_hc <- predict(m_boost_rf_hc, train)
+predicted_drop_test_hc <- predict(m_boost_rf_hc, test)
+
+predicted_drop_train_both <- predict(m_boost_rf_both, train)
+predicted_drop_test_both <- predict(m_boost_rf_both, test)
+
+rmse <- tibble()
+
+rmse <- bind_rows(rmse,
+                  tibble(predictors = 'Raw Data', 
+                         rmse_train = rmse(train$drop_day, predicted_drop_train_1), 
+                         rmse_test = rmse(test$drop_day, predicted_drop_test_1)))
+
+rmse <- bind_rows(rmse,
+                  tibble(predictors = 'PCA', 
+                         rmse_train = rmse(train$drop_day, predicted_drop_train_pca), 
+                         rmse_test = rmse(test$drop_day, predicted_drop_test_pca)))
+
+rmse <- bind_rows(rmse,
+                  tibble(predictors = 'HC Clusters', 
+                         rmse_train = rmse(train$drop_day, predicted_drop_train_hc), 
+                         rmse_test = rmse(test$drop_day, predicted_drop_test_hc)))
+
+rmse <- bind_rows(rmse,
+                  tibble(predictors = 'Both Reductions', 
+                         rmse_train = rmse(train$drop_day, predicted_drop_train_both), 
+                         rmse_test = rmse(test$drop_day, predicted_drop_test_both)))
+
+
+rmse <- rmse |> 
+  mutate(unstand_train = rmse_train*response_sd + response_mean, 
+         unstand_test = rmse_test*response_sd + response_mean) |> 
+  arrange(rmse_test)
+
+rmse
+```
+
+```{r rsquared-table-predictions}
+#Using Predictions from the RMSE chunk
+
+rsquared <- function(response, predictions, na.rm = FALSE) {
+  # Calculate the total sum of squares (TSS)
+  tss = sum((response - mean(response))^2)
+  
+  # Calculate the residual sum of squares (RSS)
+  rss = sum((response - predictions)^2)
+  
+  # Calculate R-squared
+  r_squared = 1 - (rss / tss)
+  
+  return(r_squared)
+}
+
+
+rsquareds <- tibble()
+
+rsquareds <- bind_rows(rsquareds,
+                  tibble(predictors = 'Raw Data', 
+                         rsq_train = rsquared(train$drop_day, predicted_drop_train_1), 
+                         rsq_test = rsquared(test$drop_day, predicted_drop_test_1)))
+
+rsquareds <- bind_rows(rsquareds,
+                  tibble(predictors = 'PCA', 
+                         rsq_train = rsquared(train$drop_day, predicted_drop_train_pca), 
+                         rsq_test = rsquared(test$drop_day, predicted_drop_test_pca)))
+
+rsquareds <- bind_rows(rsquareds,
+                  tibble(predictors = 'HC Clusters', 
+                         rsq_train = rsquared(train$drop_day, predicted_drop_train_hc), 
+                         rsq_test = rsquared(test$drop_day, predicted_drop_test_hc)))
+
+rsquareds <- bind_rows(rsquareds,
+                  tibble(predictors = 'Both Reductions', 
+                         rsq_train = rsquared(train$drop_day, predicted_drop_train_both), 
+                         rsq_test = rsquared(test$drop_day, predicted_drop_test_both)))
+
+
+rsquareds |> arrange(desc(rsq_test))
+```
+
+```{r final-metrics-table}
+left_join(rmse, rsquareds, 
+          by = join_by(predictors))
 ```
 
 ```{r model-results-viz}
@@ -993,21 +1083,9 @@ results |>
   theme(legend.position = 'none') 
 ```
 
-```{r info-xgboostz}
-plot(m_boost_rf_1)
-plot(m_boost_rf_pca)
-plot(m_boost_rf_hc)
-plot(m_boost_rf_both)
-
-varImp(m_boost_rf_1)
-varImp(m_boost_rf_pca)
-#varImp(m_boost_rf_hc)
-varImp(m_boost_rf_both)
-```
-
 ```{r predict-xgboost}
-predicted_drop_train_rf <- predict(m_boost_rf_both, train)
-predicted_drop_test_rf <- predict(m_boost_rf_both, test)
+predicted_drop_train_both <- predict(m_boost_rf_both, train)
+predicted_drop_test_both <- predict(m_boost_rf_both, test)
 
 train_predictions <- tibble(predicted_drop = predicted_drop_train_rf,
                             drop = train$drop_day, 
