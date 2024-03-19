@@ -43,8 +43,7 @@ duodata <- read_csv("data_flatformat.csv")
 # Explore Data
 
 ```{r view-data}
-#glimpse(duodata)
-#duoskim <- skim(duodata)
+duoskim <- skim(duodata)
 duoskim
 ```
 
@@ -1087,11 +1086,11 @@ results |>
 predicted_drop_train_both <- predict(m_boost_rf_both, train)
 predicted_drop_test_both <- predict(m_boost_rf_both, test)
 
-train_predictions <- tibble(predicted_drop = predicted_drop_train_rf,
+train_predictions <- tibble(predicted_drop = predicted_drop_train_both,
                             drop = train$drop_day, 
                             source = 'train')
 
-test_predictions <- tibble(predicted_drop = predicted_drop_test_rf,
+test_predictions <- tibble(predicted_drop = predicted_drop_test_both,
                            drop = test$drop_day,
                            source = 'test')
 
@@ -1178,7 +1177,7 @@ duodata_pca_gmm <- duodata_pca_gmm |>
 ```
 
 ```{r}
-plot(gmm_1, what = 'uncertainty')
+# plot(gmm_preds, what = 'uncertainty')
 
 max_probs <- tibble(max_prob = double())
 
@@ -1305,9 +1304,6 @@ ggplot(cluster_averages, aes(x = engagement_metrics,
 # Build Predictive Model - GMM
 
 ```{r split-data}
-#Remove color variable from 3D plot
-duodata_pca_gmm <- dplyr::select(duodata_pca_gmm, -color)
-
 #NOTE: Data already standardized
 set.seed(1234) 
 train <- sample_frac(duodata_pca_gmm, 0.8) 
